@@ -6,7 +6,7 @@ import android.os.Looper
 import android.util.Log
 import com.google.gson.JsonParser
 import com.yoyostudios.clashcompanion.accessibility.ClashCompanionAccessibilityService
-import com.yoyostudios.clashcompanion.BuildConfig
+import com.yoyostudios.clashcompanion.api.AiConnection
 import com.yoyostudios.clashcompanion.api.GeminiClient
 import com.yoyostudios.clashcompanion.capture.ScreenCaptureService
 import com.yoyostudios.clashcompanion.command.CommandParser.CommandTier
@@ -278,8 +278,8 @@ object CommandRouter {
             return
         }
 
-        if (BuildConfig.GEMINI_API_KEY.isBlank()) {
-            overlay?.updateStatus("Smart Path needs API key — use 'knight left' etc.")
+        if (!AiConnection.isConfigured()) {
+            overlay?.updateStatus("Configura Gemini en Clash Commander")
             Log.w(TAG, "CMD: SMART path skipped — no GEMINI_API_KEY")
             return
         }
@@ -566,8 +566,8 @@ Or ONLY if user says wait: {"action":"wait","reasoning":"<15 words max>"}"""
      * Voice commands still work during autopilot (Fast Path overrides).
      */
     fun startAutopilot() {
-        if (BuildConfig.GEMINI_API_KEY.isBlank()) {
-            overlay?.updateStatus("Autopilot needs API key — use 'knight left' etc.")
+        if (!AiConnection.isConfigured()) {
+            overlay?.updateStatus("Autopilot: configura Gemini en Clash Commander")
             Log.w(TAG, "CMD: Autopilot skipped — no GEMINI_API_KEY")
             return
         }
