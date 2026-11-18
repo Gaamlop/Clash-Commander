@@ -7,6 +7,12 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
+import android.app.AlertDialog
+import android.text.InputType
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.Toast
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
@@ -18,6 +24,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.yoyostudios.clashcompanion.api.AiConnection
 import com.yoyostudios.clashcompanion.capture.ScreenCaptureService
 import com.yoyostudios.clashcompanion.deck.DeckManager
 import com.yoyostudios.clashcompanion.detection.CardClassifier
@@ -33,6 +40,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
@@ -52,6 +60,7 @@ class MainActivity : ComponentActivity() {
     val deckModelWarning = mutableStateOf<String?>(null)
     val opusStatus = mutableStateOf("")
     val opusComplete = mutableStateOf(false)
+    val aiStatus = mutableStateOf("Sin configurar")
 
     private var overlayManager: OverlayManager? = null
     private lateinit var mediaProjectionLauncher: ActivityResultLauncher<Intent>
@@ -61,6 +70,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         Coordinates.init(this)
+        AiConnection.initialize(this)
+        aiStatus.value = if (AiConnection.isConfigured()) "Guardado. Toca para comprobar" else "Sin configurar"
         DeckManager.loadCardDatabase(assets)
         CardClassifier.init(this)
 
@@ -209,6 +220,64 @@ class MainActivity : ComponentActivity() {
         overlayManager?.show()
     }
 
+    /**
+     * Pair to a private Gemini relay without placing the Gemini key in the APK.
+     * Only the user's private access token is entered here.
+     */
+    fun openAiSettings() {
+        val margin = (20 * resources.displayMetrics.density).toInt()
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(margin, margin / 2, margin, 0)
+        }
+        val explanation = TextView(this).apply {
+            text = "Ingresa la URL de tu servidor y el token privado. Nunca pegues tu clave de Google aqui."
+        }
+        val urlInput = EditText(this).apply {
+            hint = "https://tu-servidor.workers.dev"
+            setText(AiConnection.endpointOrEmpty())
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            isSingleLine = true
+        }
+        val tokenInput = EditText(this).apply {
+            hint = "Token privado (vacio para conservar el anterior)"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            isSingleLine = true
+        }
+        form.addView(explanation)
+        form.addView(urlInput)
+        form.addView(tokenInput)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Configurar Autopilot")
+            .setView(form)
+            .setPositiveButton("Guardar", null)
+            .setNegativeButton("Cancelar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                try {
+                    AiConnection.save(urlInput.text.toString(), tokenInput.text.toString())
+                    aiStatus.value = "Verificando conexion..."
+                    dialog.dismiss()
+                    scope.launch {
+                        try {
+                            withContext(Dispatchers.IO) { AiConnection.testConnection() }
+                            aiStatus.value = "Conectado. Gemini disponible"
+                            if (deckCards.value.isNotEmpty()) {
+                                triggerOpusAnalysis(deckCards.value)
+                            }
+                        } catch (e: Exception) {
+                            aiStatus.value = "Error: " + (e.message ?: "sin respuesta")
+                        }
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(this, e.message ?: "Revisa la URL y el token", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+        dialog.show()
+    }
+
     // ── Deck handling ──
 
     private fun handleDeckIntent(intent: Intent?) {
@@ -269,26 +338,22 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun triggerOpusAnalysis(deck: List<DeckManager.CardInfo>) {
-        val apiKey = BuildConfig.ANTHROPIC_API_KEY
-        if (apiKey.isBlank()) {
-            opusStatus.value = "No API key"
-            Log.w(TAG, "OPUS: No API key, skipping")
+        if (!AiConnection.isConfigured()) {
+            opusStatus.value = "Configura Gemini para analizar el mazo"
             return
         }
         opusStatus.value = "Analyzing deck..."
         opusComplete.value = false
         scope.launch {
-            OpusCoach.analyzeWithProgress(deck, this@MainActivity) { progress ->
+            val result = OpusCoach.analyzeWithProgress(deck, this@MainActivity) { progress ->
                 runOnUiThread {
                     opusStatus.value = progress
                 }
             }
             // After coroutine completes, check if playbook was generated
             runOnUiThread {
-                if (OpusCoach.cachedPlaybook != null) {
-                    opusComplete.value = true
-                    opusStatus.value = "Strategy Ready"
-                }
+                opusComplete.value = result != null
+                opusStatus.value = if (result != null) "Strategy Ready" else "Strategy unavailable"
             }
         }
     }
