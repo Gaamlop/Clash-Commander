@@ -1,15 +1,8 @@
-import java.util.Properties
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
-
-// Load API keys from local.properties
-val localProps = Properties()
-val localPropsFile = rootProject.file("local.properties")
-if (localPropsFile.exists()) localProps.load(localPropsFile.inputStream())
 
 android {
     namespace = "com.yoyostudios.clashcompanion"
@@ -19,12 +12,13 @@ android {
         applicationId = "com.yoyostudios.clashcompanion"
         minSdk = 28
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
 
-        buildConfigField("String", "ANTHROPIC_API_KEY", "\"${localProps.getProperty("ANTHROPIC_API_KEY", "")}\"")
-        buildConfigField("String", "GEMINI_API_KEY", "\"${localProps.getProperty("GEMINI_API_KEY", "")}\"")
-        buildConfigField("String", "ROBOFLOW_API_KEY", "\"${localProps.getProperty("ROBOFLOW_API_KEY", "")}\"")
+        // No third-party API key may be embedded in an APK.
+        buildConfigField("String", "ANTHROPIC_API_KEY", "\"\"")
+        buildConfigField("String", "GEMINI_API_KEY", "\"\"")
+        buildConfigField("String", "ROBOFLOW_API_KEY", "\"\"")
     }
 
     buildTypes {
