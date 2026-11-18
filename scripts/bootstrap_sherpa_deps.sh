@@ -41,9 +41,15 @@ curl -fL --retry 3 "$JNI_URL" -o "$TMP/sherpa.tar.bz2"
 mkdir "$TMP/jni"
 tar -xjf "$TMP/sherpa.tar.bz2" -C "$TMP/jni"
 
+# Only copy ARM64 binaries. A generic find by filename silently selected
+# x86_64 libraries and packaged them as arm64-v8a, crashing Voice Engine.
 for f in libonnxruntime.so libsherpa-onnx-jni.so libsherpa-onnx-c-api.so libsherpa-onnx-cxx-api.so; do
-  src="$(find "$TMP/jni" -type f -name "$f" -print -quit)"
-  [ -n "$src" ] || { echo "No se encontró $f en el archivo descargado"; exit 1; }
+  src="$(find "$TMP/jni" -type f -path "*/jniLibs/arm64-v8a/$f" -print -quit)"
+  [ -n "$src" ] || { echo "No se encontró la biblioteca ARM64: $f"; exit 1; }
+  if ! readelf -h "$src" | grep -q 'Machine:.*AArch64'; then
+    echo "ERROR: $src no es una biblioteca ARM64 (AArch64)"
+    exit 1
+  fi
   cp "$src" "$JNI/$f"
 done
 
