@@ -6,7 +6,6 @@ import android.util.Log
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
-import com.yoyostudios.clashcompanion.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -28,12 +27,10 @@ import java.util.concurrent.TimeUnit
 object GeminiClient {
 
     private const val TAG = "ClashCompanion"
-    private const val MODEL = "gemini-3-flash-preview"
-    private const val BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS)
         .writeTimeout(15, TimeUnit.SECONDS)
         .build()
 
@@ -57,18 +54,13 @@ object GeminiClient {
         maxTokens: Int = 1024,
         jsonMode: Boolean = true
     ): String = withContext(Dispatchers.IO) {
-        val apiKey = BuildConfig.GEMINI_API_KEY
-        if (apiKey.isBlank()) {
-            throw IllegalStateException("GEMINI_API_KEY not set in local.properties")
-        }
-
         // Build parts array with text only
         val partsArray = JsonArray().apply {
             add(JsonObject().apply { addProperty("text", userMessage) })
         }
 
         val body = buildRequestBody(systemInstruction, partsArray, maxTokens, jsonMode)
-        return@withContext executeRequest(apiKey, body)
+        return@withContext executeRequest(body)
     }
 
     /**
@@ -89,11 +81,6 @@ object GeminiClient {
         maxTokens: Int = 1024,
         jsonMode: Boolean = true
     ): String = withContext(Dispatchers.IO) {
-        val apiKey = BuildConfig.GEMINI_API_KEY
-        if (apiKey.isBlank()) {
-            throw IllegalStateException("GEMINI_API_KEY not set in local.properties")
-        }
-
         // Build parts array: images first, then text
         val partsArray = JsonArray()
         for (img in images) {
@@ -107,7 +94,7 @@ object GeminiClient {
         partsArray.add(JsonObject().apply { addProperty("text", userText) })
 
         val body = buildRequestBody(systemInstruction, partsArray, maxTokens, jsonMode)
-        return@withContext executeRequest(apiKey, body)
+        return@withContext executeRequest(body)
     }
 
     // ── Utilities ───────────────────────────────────────────────────────
@@ -208,17 +195,18 @@ object GeminiClient {
      * Execute the HTTP request and parse the response.
      * Extracts candidates[0].content.parts[0].text from Gemini response.
      */
-    private fun executeRequest(apiKey: String, body: JsonObject): String {
-        val url = "$BASE_URL/$MODEL:generateContent?key=$apiKey"
+    private fun executeRequest(body: JsonObject): String {
+        val url = AiConnection.endpoint() + "/v1/gemini"
         val requestBody = body.toString().toRequestBody(JSON_MEDIA_TYPE)
 
         val request = Request.Builder()
             .url(url)
+            .addHeader("Authorization", "Bearer " + AiConnection.bearerToken())
             .addHeader("content-type", "application/json")
             .post(requestBody)
             .build()
 
-        Log.i(TAG, "GEMINI: Calling $MODEL...")
+        Log.i(TAG, "GEMINI: Calling private Gemini proxy")
         val startTime = System.currentTimeMillis()
 
         val response = client.newCall(request).execute()
@@ -226,7 +214,7 @@ object GeminiClient {
         val responseBody = response.body?.string() ?: ""
 
         if (!response.isSuccessful) {
-            Log.e(TAG, "GEMINI: Error ${response.code}: ${responseBody.take(300)}")
+            Log.e(TAG, "GEMINI: Proxy/provider error HTTP ${response.code}")
             throw RuntimeException("Gemini API error ${response.code}: ${responseBody.take(200)}")
         }
 
