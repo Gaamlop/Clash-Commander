@@ -36,16 +36,9 @@ jobs:
           chmod +x scripts/bootstrap_sherpa_deps.sh
           ./scripts/bootstrap_sherpa_deps.sh
 
-      - name: Configure API keys
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          ROBOFLOW_API_KEY: ${{ secrets.ROBOFLOW_API_KEY }}
+      - name: Configure SDK only (no API secrets inside APK)
         run: |
           printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
-          printf 'ANTHROPIC_API_KEY=%s\n' "$ANTHROPIC_API_KEY" >> local.properties
-          printf 'GEMINI_API_KEY=%s\n' "$GEMINI_API_KEY" >> local.properties
-          printf 'ROBOFLOW_API_KEY=%s\n' "$ROBOFLOW_API_KEY" >> local.properties
 
       - name: Build APK
         run: ./gradlew assembleDebug
