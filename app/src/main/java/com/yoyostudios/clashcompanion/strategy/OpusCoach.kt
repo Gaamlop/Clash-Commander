@@ -2,7 +2,8 @@ package com.yoyostudios.clashcompanion.strategy
 
 import android.content.Context
 import android.util.Log
-import com.yoyostudios.clashcompanion.api.AnthropicClient
+import com.yoyostudios.clashcompanion.api.GeminiClient
+import com.google.gson.JsonParser
 import com.yoyostudios.clashcompanion.deck.DeckManager
 import java.io.File
 
@@ -17,7 +18,6 @@ import java.io.File
 object OpusCoach {
 
     private const val TAG = "ClashCompanion"
-    private const val MODEL = "claude-opus-4-6"
     private const val PLAYBOOK_FILE = "playbook.json"
 
     /** Cached playbook JSON from the last analysis */
@@ -67,7 +67,7 @@ Respond ONLY with valid JSON. No other text.
         val deckJson = DeckManager.getDeckJson()
         val deckNames = deck.joinToString(", ") { it.name }
 
-        onProgress("Analyzing deck with Claude Opus...")
+        onProgress("Analyzing deck with Gemini...")
         Log.i(TAG, "OPUS: Starting analysis for: $deckNames")
 
         return try {
@@ -75,12 +75,14 @@ Respond ONLY with valid JSON. No other text.
 
             val userMessage = "DECK (loaded from game data):\n$deckJson\n\nAnalyze this deck and generate the strategic playbook."
 
-            val result = AnthropicClient.chat(
-                model = MODEL,
-                systemPrompt = SYSTEM_PROMPT,
+            val response = GeminiClient.chat(
+                systemInstruction = SYSTEM_PROMPT,
                 userMessage = userMessage,
-                maxTokens = 4096
+                maxTokens = 8192,
+                jsonMode = true
             )
+            val result = GeminiClient.cleanJsonResponse(response)
+            JsonParser.parseString(result).asJsonObject // Do not cache incomplete playbooks
 
             val elapsed = System.currentTimeMillis() - startTime
 
@@ -98,12 +100,12 @@ Respond ONLY with valid JSON. No other text.
         } catch (e: IllegalStateException) {
             // API key not set
             Log.w(TAG, "OPUS: ${e.message}")
-            onProgress("Set API key in local.properties")
+            onProgress("Configure Gemini connection")
             loadFallbackPlaybook(context)
             null
         } catch (e: Exception) {
             Log.e(TAG, "OPUS: Analysis failed: ${e.message}", e)
-            onProgress("Opus error: ${e.message?.take(50)}")
+            onProgress("Strategy error: ${e.message?.take(50)}")
             loadFallbackPlaybook(context)
             null
         }
