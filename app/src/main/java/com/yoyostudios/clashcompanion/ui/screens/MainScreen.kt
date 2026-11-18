@@ -63,6 +63,7 @@ fun MainScreen(activity: MainActivity) {
     val deckModelWarning by activity.deckModelWarning
     val opusStatus by activity.opusStatus
     val opusComplete by activity.opusComplete
+    val aiStatus by activity.aiStatus
 
     val allReady = overlayOk && accessibilityOk && micOk && captureOk && speechReady
 
@@ -202,6 +203,31 @@ fun MainScreen(activity: MainActivity) {
                     opusStatus = opusStatus,
                     opusComplete = opusComplete
                 )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // Settings only. Actual autopilot remains controlled by voice.
+            CrCard(modifier = Modifier.fillMaxWidth().clickable { activity.openAiSettings() }) {
+                Column {
+                    Text(
+                        text = "GEMINI AUTOPILOT",
+                        style = CrTypography.titleMedium,
+                        color = CrColors.TextGold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = aiStatus,
+                        style = CrTypography.bodyMedium,
+                        color = CrColors.TextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Toca para configurar o cambiar la conexion segura",
+                        style = CrTypography.labelSmall,
+                        color = CrColors.TextSecondary
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
