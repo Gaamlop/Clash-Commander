@@ -10,6 +10,23 @@ Built solo in 48 hours for the [Supercell Global AI Game Hack](https://ailab.sup
 
 ---
 
+## NUEVO EN ESTE FORK: Gemini sin claves dentro de la APK
+
+La version 1.1 agrega **GEMINI AUTOPILOT** en la pantalla de Clash Commander.
+Se configura una vez con la URL de tu propio servidor protegido y un token
+privado. La clave de Google se guarda solo como secreto en el servidor; ni
+la clave de Google ni los secretos de GitHub se agregan al APK.
+
+**Guia en espanol:** [backend/README.md](backend/README.md).
+**Codigo del servidor:** [backend/worker.js](backend/worker.js).
+
+Para usar las funciones de voz normales no necesitas servidor. Autopilot y el
+analisis de mazos con Gemini requieren instalar/configurar primero tu Worker.
+La APK publicada originalmente por otro autor es distinta a la compilada
+desde este fork.
+
+---
+
 ## Download (Pre-Built APK)
 
 **[Download Clash Commander v1.1 APK](https://github.com/youssofal/Clash-Commander/releases/download/v1.0.0/clash-commander-v1.1.apk)** (~456MB, includes all on-device models)
