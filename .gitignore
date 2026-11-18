@@ -20,6 +20,9 @@ app/src/main/jniLibs/
 .idea/
 *.iml
 local.properties
+.dev.vars*
+.env
+.env.*
 
 # Test screenshots & debug images
 clash_test*.png
