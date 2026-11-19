@@ -7,6 +7,8 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.os.Environment
+import android.os.Build
+import kotlin.concurrent.thread
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
@@ -58,6 +60,7 @@ class OverlayManager(private val context: Context) {
     private val queueCheckRunnable = object : Runnable {
         override fun run() {
             CommandRouter.checkQueue()
+            updateHandDisplay(HandDetector.currentHand)
             handler.postDelayed(this, 2000)
         }
     }
@@ -118,7 +121,7 @@ class OverlayManager(private val context: Context) {
             text = ""
             setTextColor(Color.argb(255, 100, 255, 100))
             textSize = 11f
-            maxLines = 4
+            maxLines = 7
         }
         handText = handDisplay
         layout.addView(handDisplay)
@@ -172,6 +175,18 @@ class OverlayManager(private val context: Context) {
         }
         buttonRow.addView(btnMinimize)
 
+        // Explicit, user-initiated capture diagnostic. No screenshots are
+        // uploaded automatically or stored in logs.
+        val btnImage = Button(context).apply {
+            text = "Img"
+            textSize = 11f
+            minWidth = 0; minimumWidth = 0
+            minHeight = 0; minimumHeight = 0
+            setPadding(12, 6, 12, 6)
+            setOnClickListener { saveDebugFrame() }
+        }
+        buttonRow.addView(btnImage)
+
         // Close overlay button
         val btnClose = Button(context).apply {
             text = "Close"
@@ -203,6 +218,7 @@ class OverlayManager(private val context: Context) {
         windowManager.addView(layout, params)
         CommandRouter.overlay = this
         Log.i(TAG, "Overlay shown")
+        updateHandDisplay(HandDetector.currentHand)
 
         // Auto-start hand scanning with ML classifier
         if (!HandDetector.isScanning && ScreenCaptureService.instance != null) {
@@ -337,6 +353,7 @@ class OverlayManager(private val context: Context) {
         val queueInfo = CommandRouter.getQueueDisplay()
         val rulesInfo = CommandRouter.getRulesDisplay()
         val sb = StringBuilder("Hand: ${slots.joinToString(" | ")} | Next: $next")
+        sb.append("\n").append(HandDetector.diagnosticStatus)
         if (queueInfo.isNotEmpty()) sb.append("\nQueue:\n$queueInfo")
         if (rulesInfo.isNotEmpty()) sb.append("\nRules:\n$rulesInfo")
         if (ArenaDetector.isPolling) {
@@ -345,4 +362,58 @@ class OverlayManager(private val context: Context) {
         }
         handText?.text = sb.toString()
     }
+    /**
+     * Save precisely what Android's MediaProjection gives the classifier.
+     * Helps distinguish stale/app-only capture from poor model recognition.
+     * This runs only when the user taps the Img button.
+     */
+    private fun saveDebugFrame() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            updateStatus("IMG: Disponible desde Android 10")
+            return
+        }
+        val frame = ScreenCaptureService.getLatestFrame()
+        val snapshot = try {
+            frame?.copy(Bitmap.Config.ARGB_8888, false)
+        } catch (e: Exception) {
+            Log.w(TAG, "IMG: Failed copying screen frame: ${e.message}")
+            null
+        }
+        if (snapshot == null) {
+            updateStatus("IMG: No hay captura. Reinicia Screen Capture")
+            return
+        }
+
+        updateStatus("IMG: Guardando captura...")
+        thread(name = "Clash-DebugCapture") {
+            try {
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME,
+                        "ClashCommander-debug-${System.currentTimeMillis()}.jpg")
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                    put(MediaStore.Images.Media.RELATIVE_PATH,
+                        Environment.DIRECTORY_PICTURES + "/ClashCommander")
+                }
+                val uri = context.contentResolver.insert(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values
+                ) ?: throw IllegalStateException("No se pudo crear la imagen")
+                context.contentResolver.openOutputStream(uri)?.use { stream ->
+                    check(snapshot.compress(Bitmap.CompressFormat.JPEG, 85, stream)) {
+                        "No se pudo guardar JPG"
+                    }
+                } ?: throw IllegalStateException("No hay acceso al archivo")
+                handler.post {
+                    updateStatus("IMG: Guardada en Fotos/Pictures/ClashCommander")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "IMG: Capture export failed: ${e.message}")
+                handler.post {
+                    updateStatus("IMG: Error al guardar ${e.message?.take(60)}")
+                }
+            } finally {
+                snapshot.recycle()
+            }
+        }
+    }
+
 }
