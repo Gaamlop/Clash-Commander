@@ -20,7 +20,10 @@ object CardTemplateMatcher {
     private const val TAG = "ClashCompanion"
     private const val FILE = "hand_templates.json"
     private const val SIZE = 12
-    private const val MAX_RMSE = 0.145
+    // 1.3 rejected the user's actual Royal Ghost and Minion Giant at
+    // RMSE 0.152-0.155. 0.18 still separates them from other deck cards
+    // (next-best distances >0.23 in the diagnostic screenshot test).
+    private const val MAX_RMSE = 0.18
     private const val MIN_MARGIN = 0.065
 
     private data class Template(val name: String, val rgb: ByteArray)
