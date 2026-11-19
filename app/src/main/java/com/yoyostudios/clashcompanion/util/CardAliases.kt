@@ -142,6 +142,9 @@ object CardAliases {
         "archers" to "Archers",
         "archer" to "Archers",
 
+        "minion giant" to "Minion Giant",
+        "giant minion" to "Minion Giant",
+        "minions giant" to "Minion Giant",
         "minions" to "Minions",
         "minion" to "Minions",
         "minie's" to "Minions",        // STT: "minions" -> "minie's"
@@ -471,6 +474,7 @@ object CardAliases {
         "Freeze" to 4,
         "Furnace" to 4,
         "Goblin Hut" to 4,
+        "Minion Giant" to 4,
         "Goblin Drill" to 4,
         "Bomb Tower" to 4,
         "Flying Machine" to 4,
@@ -551,6 +555,7 @@ object CardAliases {
         "Skeleton Army" to "troop",
         "Witch" to "troop",
         "Wizard" to "troop",
+        "Minion Giant" to "troop",
         "Bomber" to "troop",
         "Barbarians" to "troop",
         "Golem" to "troop",
