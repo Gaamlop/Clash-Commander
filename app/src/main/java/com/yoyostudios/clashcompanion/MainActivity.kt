@@ -185,7 +185,20 @@ class MainActivity : ComponentActivity() {
     }
 
     fun startScreenCapture() {
-        if (ScreenCaptureService.instance != null) return
+        // Tapping Screen Capture again deliberately renews Android's
+        // media-projection consent. Select "Entire screen" rather than
+        // "A single app", which can otherwise show only Clash Commander.
+        if (ScreenCaptureService.instance != null) {
+            stopService(Intent(this, ScreenCaptureService::class.java))
+            captureRunning.value = false
+            android.os.Handler(mainLooper).postDelayed({
+                val pm = getSystemService(
+                    Context.MEDIA_PROJECTION_SERVICE
+                ) as MediaProjectionManager
+                mediaProjectionLauncher.launch(pm.createScreenCaptureIntent())
+            }, 400L)
+            return
+        }
         val pm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         mediaProjectionLauncher.launch(pm.createScreenCaptureIntent())
     }
