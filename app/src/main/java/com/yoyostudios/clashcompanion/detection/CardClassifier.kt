@@ -29,9 +29,10 @@ object CardClassifier {
     private const val CLASSES_ASSET = "card_classes.json"
     private const val INPUT_SIZE = 224
     private const val NUM_CHANNELS = 3
-    // Very low threshold: with only 8 deck cards, the highest among 8 is
-    // almost always correct. Only reject if the model truly has no signal.
-    private const val CONFIDENCE_THRESHOLD = 0.05f
+    // Reject weak classifications: uncertain slots must stay unknown.
+    // Do not choose the 'least wrong' class from the user's deck. The full
+    // 103-class model must strongly agree before a tap is allowed.
+    private const val CONFIDENCE_THRESHOLD = 0.35f
 
     // YOLOv8 classify expects raw RGB [0, 1] -- NO ImageNet mean/std normalization
 
@@ -54,15 +55,16 @@ object CardClassifier {
 
     /** Deck cards that are NOT supported by the on-device model. */
     fun unsupportedDeckCards(deck: List<DeckManager.CardInfo>): List<DeckManager.CardInfo> {
-        if (!isReady) return deck
         val supported = supportedKeys()
-        return deck.filter { it.key !in supported }
+        val experimental = CardTemplateMatcher.supportedNames()
+        return deck.filter { it.key !in supported && it.name !in experimental }
     }
 
     /**
      * Load the model and class mapping from assets. Call once at startup.
      */
     fun init(context: Context) {
+        CardTemplateMatcher.init(context.assets)
         if (module != null) return
         try {
             val startTime = System.currentTimeMillis()
@@ -112,7 +114,7 @@ object CardClassifier {
      * @return Map of slotIndex (0-3 hand, 4 next) -> DeckManager card name
      */
     fun classifyHand(frame: Bitmap, deckCards: List<String>): Map<Int, String> {
-        if (!isReady) return emptyMap()
+        if (!isReady && !CardTemplateMatcher.isReady()) return emptyMap()
 
         val rois = Coordinates.getCardSlotROIs(frame.width, frame.height)
         val nextRoi = Coordinates.getNextCardROI(frame.width, frame.height)
@@ -143,12 +145,14 @@ object CardClassifier {
             }
         }
 
-        if (deckIndices.isEmpty()) {
-            Log.w(TAG, "CARD-ML: No deck cards mapped to model classes!")
+        if (deckIndices.isEmpty() && !CardTemplateMatcher.isReady()) {
+            Log.w(TAG, "CARD-ML: No deck cards mapped to model or templates!")
             return emptyMap()
         }
 
         val result = mutableMapOf<Int, String>()
+        val allowedNames = DeckManager.currentDeck.map { it.name }.toSet()
+        val usedNames = mutableSetOf<String>()
 
         // Classify slots 0-4
         val allRois = rois.mapIndexed { i, roi -> i to roi }.toMutableList()
@@ -156,24 +160,37 @@ object CardClassifier {
 
         for ((slot, roi) in allRois) {
             val crop = safeCrop(frame, roi) ?: continue
-            val probs = classifyRaw(crop)
-            crop.recycle()
-            if (probs == null) continue
-
-            // Find best match ONLY among deck cards
-            var bestIdx = -1
-            var bestProb = 0f
-            var bestName = ""
-            for ((idx, name) in deckIndices) {
-                if (idx < probs.size && probs[idx] > bestProb) {
-                    bestProb = probs[idx]
-                    bestIdx = idx
-                    bestName = name
+            try {
+                // Owner's video-derived fingerprints recognize new/updated card art.
+                // Only main-hand cards: the much smaller next-card artwork is
+                // rendered at a different size and needs separate calibration.
+                if (slot < 4) {
+                    val templateName = CardTemplateMatcher.match(crop, allowedNames)
+                    if (templateName != null && templateName !in usedNames) {
+                        result[slot] = templateName
+                        usedNames.add(templateName)
+                        continue
+                    }
                 }
-            }
 
-            if (bestProb >= CONFIDENCE_THRESHOLD && bestName.isNotEmpty()) {
-                result[slot] = bestName
+                // Model fallback only when the best class across ALL 103 classes
+                // is also an actual deck card with strong probability.
+                // Previously 0.05 among seven deck classes caused false matches.
+                val probs = classifyRaw(crop) ?: continue
+                if (probs.isEmpty()) continue
+                var globalBestIdx = 0
+                for (i in 1 until probs.size) {
+                    if (probs[i] > probs[globalBestIdx]) globalBestIdx = i
+                }
+                val deckMatch = deckIndices.firstOrNull {
+                    it.first == globalBestIdx && it.second !in usedNames
+                }
+                if (deckMatch != null && probs[globalBestIdx] >= CONFIDENCE_THRESHOLD) {
+                    result[slot] = deckMatch.second
+                    usedNames.add(deckMatch.second)
+                }
+            } finally {
+                crop.recycle()
             }
         }
 
