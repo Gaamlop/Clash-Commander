@@ -51,8 +51,8 @@ internal object ElixirBarMath {
         val holes = (0..lastFilled).count { !filled[it] }
         if (holes > 2) return null
 
-        // For full 10, require almost every sampled point to show magenta.
-        if (lastFilled >= filled.size - 2 && filledCount >= filled.size - 2) return 10
+        // A full 10 requires the ENTIRE sampled bar to be filled.
+        if (filledCount == filled.size) return 10
 
         // Conservative floor: never round up to afford a card prematurely.
         return (filledCount * 10 / filled.size).coerceIn(0, 9)
