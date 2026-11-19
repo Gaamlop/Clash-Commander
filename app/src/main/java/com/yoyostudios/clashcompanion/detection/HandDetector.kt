@@ -65,6 +65,7 @@ object HandDetector {
         private set
 
     private val captureAuthorization = CaptureAuthorization()
+    @Volatile private var reliableFreshSlots: Int = 0
 
     /**
      * Autopilot must not trust stale cards, a menu screenshot, or a
@@ -72,7 +73,7 @@ object HandDetector {
      */
     fun hasReliableHand(minCards: Int = 3): Boolean =
         captureAuthorization.isFresh(System.currentTimeMillis()) &&
-            currentHand.filterKeys { it in 0..3 }.values.distinct().size >= minCards
+            reliableFreshSlots >= minCards
 
     // ── Match Detection ─────────────────────────────────────────────────
 
@@ -145,6 +146,7 @@ object HandDetector {
         consecutiveNullFrames = 0
         currentHand = emptyMap()
         captureAuthorization.revoke()
+        reliableFreshSlots = 0
         diagnosticStatus = "Iniciando detector de cartas"
         var matchDetected = false
         var consecutiveNonMatch = 0
@@ -226,7 +228,9 @@ object HandDetector {
                         }
                     }
 
-                    captureAuthorization.authorizeFrame(System.currentTimeMillis())
+                    // Revoke before inference: the prior scan cannot authorize a tap while
+                    // classification is running or when its results are uncertain.
+                    captureAuthorization.revoke()
                     Coordinates.updateFromCapture(safeCopy.width, safeCopy.height)
 
                     // Classify all 5 card slots using both calibrated templates
@@ -267,6 +271,11 @@ object HandDetector {
                     }
 
                     val hand = merged.toMap()
+                    // Smoothing helps the display but must not authorize actions:
+                    // only cards recognized in THIS frame count toward reliability.
+                    val freshSlots = FreshHandAuthorization.verifiedSlots(newScan, hand)
+                    captureAuthorization.authorizeFrame(System.currentTimeMillis())
+                    reliableFreshSlots = freshSlots
 
                     // Atomic swap of hand state
                     currentHand = hand
@@ -305,6 +314,7 @@ object HandDetector {
         scanJob = null
         currentHand = emptyMap()
         captureAuthorization.revoke()
+        reliableFreshSlots = 0
         diagnosticStatus = "Escaner detenido"
         Log.i(TAG, "CARD-ML: Scanning stopped")
     }
