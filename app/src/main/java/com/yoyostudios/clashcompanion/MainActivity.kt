@@ -28,6 +28,7 @@ import com.yoyostudios.clashcompanion.api.AiConnection
 import com.yoyostudios.clashcompanion.capture.ScreenCaptureService
 import com.yoyostudios.clashcompanion.deck.DeckManager
 import com.yoyostudios.clashcompanion.detection.CardClassifier
+import com.yoyostudios.clashcompanion.detection.CardTemplateMatcher
 import com.yoyostudios.clashcompanion.detection.HandDetector
 import com.yoyostudios.clashcompanion.overlay.OverlayManager
 import com.yoyostudios.clashcompanion.speech.SpeechService
@@ -333,16 +334,26 @@ class MainActivity : ComponentActivity() {
 
     private fun updateDeckModelWarning(cards: List<DeckManager.CardInfo>) {
         val unsupported = CardClassifier.unsupportedDeckCards(cards)
-        if (unsupported.isEmpty()) {
-            deckModelWarning.value = null
-            return
+        val experimental = cards.filter {
+            it.name in CardTemplateMatcher.supportedNames()
         }
-
-        val names = unsupported.joinToString(", ") { it.name }
-        deckModelWarning.value =
-            "Aviso: la deteccion visual aun no reconoce $names. " +
-                "Autopilot podria confundir esa carta hasta actualizar el modelo."
-        Log.w(TAG, "DECK: Unsupported by on-device classifier (${unsupported.size}): $names")
+        val warnings = mutableListOf<String>()
+        if (experimental.isNotEmpty()) {
+            warnings.add(
+                "Vision 1.3 experimental: reconocimiento de " +
+                    experimental.joinToString(", ") { it.name } +
+                    " a partir de tu video. Verifica los resultados en una partida de practica."
+            )
+        }
+        if (unsupported.isNotEmpty()) {
+            warnings.add(
+                "Sin soporte visual: " +
+                    unsupported.joinToString(", ") { it.name } +
+                    ". No se jugaran automaticamente cuando la IA no las reconozca."
+            )
+        }
+        deckModelWarning.value = warnings.joinToString("\n").ifBlank { null }
+        if (warnings.isNotEmpty()) Log.w(TAG, "DECK: ${warnings.joinToString(" | ")}")
     }
 
     private fun triggerOpusAnalysis(deck: List<DeckManager.CardInfo>) {
