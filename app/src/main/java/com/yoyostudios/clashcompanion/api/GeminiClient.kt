@@ -85,8 +85,8 @@ object GeminiClient {
         val partsArray = JsonArray()
         for (img in images) {
             partsArray.add(JsonObject().apply {
-                add("inline_data", JsonObject().apply {
-                    addProperty("mime_type", "image/jpeg")
+                add("inlineData", JsonObject().apply {
+                    addProperty("mimeType", "image/jpeg")
                     addProperty("data", img)
                 })
             })
@@ -195,7 +195,7 @@ object GeminiClient {
      * Execute the HTTP request and parse the response.
      * Extracts candidates[0].content.parts[0].text from Gemini response.
      */
-    private fun executeRequest(body: JsonObject): String {
+    private suspend fun executeRequest(body: JsonObject): String {
         val url = AiConnection.endpoint() + "/v1/gemini"
         val requestBody = body.toString().toRequestBody(JSON_MEDIA_TYPE)
 
@@ -209,17 +209,10 @@ object GeminiClient {
         Log.i(TAG, "GEMINI: Calling private Gemini proxy")
         val startTime = System.currentTimeMillis()
 
-        val response = client.newCall(request).execute()
+        val responseBody = client.newCall(request).awaitResponseBody()
         val elapsed = System.currentTimeMillis() - startTime
-        val responseBody = response.body?.string() ?: ""
-
-        if (!response.isSuccessful) {
-            Log.e(TAG, "GEMINI: Proxy/provider error HTTP ${response.code}")
-            throw RuntimeException("Gemini API error ${response.code}: ${responseBody.take(200)}")
-        }
 
         Log.i(TAG, "GEMINI: Response in ${elapsed}ms (${responseBody.length} chars)")
-        Log.d(TAG, "GEMINI: Raw response: ${responseBody.take(500)}")
 
         // Parse: { candidates: [{ content: { parts: [{ text: "..." }] } }] }
         try {
@@ -237,8 +230,6 @@ object GeminiClient {
 
             val candidates = json.getAsJsonArray("candidates")
             if (candidates == null || candidates.size() == 0) {
-                // Log full response for debugging
-                Log.e(TAG, "GEMINI: No candidates in response: $responseBody")
                 throw RuntimeException("No candidates in Gemini response")
             }
 
@@ -252,24 +243,26 @@ object GeminiClient {
 
             val content = candidate.getAsJsonObject("content")
             if (content == null) {
-                Log.e(TAG, "GEMINI: No content in candidate: $candidate")
                 throw RuntimeException("No content in Gemini candidate")
             }
 
             val parts = content.getAsJsonArray("parts")
             if (parts != null && parts.size() > 0) {
-                val text = parts[0].asJsonObject.get("text")?.asString ?: ""
-                Log.i(TAG, "GEMINI: Extracted text (${text.length} chars): ${text.take(200)}")
+                val text = parts.mapNotNull { part ->
+                    val value = part.asJsonObject
+                    if (value.get("thought")?.asBoolean == true) null
+                    else value.get("text")?.asString
+                }.joinToString("")
+                check(text.isNotBlank()) { "Empty text in Gemini response" }
+                Log.i(TAG, "GEMINI: Extracted text (${text.length} chars)")
                 return text
             }
 
-            Log.e(TAG, "GEMINI: No parts in content: $content")
             throw RuntimeException("No parts in Gemini content")
         } catch (e: Exception) {
-            if (e is RuntimeException) throw e
-            Log.e(TAG, "GEMINI: Failed to parse response: ${e.message}")
-            Log.e(TAG, "GEMINI: Response was: ${responseBody.take(500)}")
-            throw RuntimeException("Failed to parse Gemini response: ${e.message}")
+            Log.e(TAG, "GEMINI: Invalid response (${e.javaClass.simpleName})")
+            throw RuntimeException("No se pudo interpretar la respuesta de Gemini")
         }
     }
+
 }

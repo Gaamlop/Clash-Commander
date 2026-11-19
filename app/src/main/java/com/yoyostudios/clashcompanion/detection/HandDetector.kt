@@ -2,306 +2,220 @@ package com.yoyostudios.clashcompanion.detection
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.SystemClock
 import android.util.Log
 import com.yoyostudios.clashcompanion.capture.ScreenCaptureService
 import com.yoyostudios.clashcompanion.util.Coordinates
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicLong
 
-/**
- * Hand detection using on-device ResNet card classifier.
- *
- * Scans the 4 visible hand card slots + 1 next-card slot at ~5 FPS.
- * Each scan classifies all 5 slots via CardClassifier (~5ms total).
- * Results cached in [currentHand] for instant lookup by CommandRouter.
- *
- * Uses YOLOv8n-cls classifier via CardClassifier for real-time inference.
- */
+/** Local card recognition; smoothed display values never authorize a tap. */
 object HandDetector {
-
     private const val TAG = "ClashCompanion"
-    private const val SCAN_INTERVAL_MS = 200L // ~5 FPS
+    private const val SCAN_INTERVAL_MS = 200L
     private const val MATCH_BRIGHTNESS_THRESHOLD = 80
-    /** Consecutive non-match frames needed to declare match ended (10 × 200ms = 2s) */
     private const val MATCH_EXIT_FRAMES = 10
-
-    // ── State ───────────────────────────────────────────────────────────
-
-    /**
-     * Current hand state: slotIndex → cardName (DeckManager format).
-     * Slots 0-3 = hand cards (left to right), slot 4 = next card.
-     * Thread-safe via @Volatile + immutable map swap.
-     */
-    @Volatile
-    var currentHand: Map<Int, String> = emptyMap()
-        private set
-
-    /** Convenience: cardName → slotIndex (hand slots 0-3 only) */
-    val cardToSlot: Map<String, Int>
-        get() = currentHand.filterKeys { it < 4 }
-            .entries.associate { (slot, card) -> card to slot }
-
-    /** The next card waiting in queue (slot 4), or null */
-    val nextCard: String?
-        get() = currentHand[4]
-
-    /** Whether the classifier model is loaded */
-    val isCalibrated: Boolean
-        get() = CardClassifier.isReady
-
-    /** Number of known cards (always 8 once deck is loaded) */
-    val templateCount: Int
-        get() = if (CardClassifier.isReady) 8 else 0
-
-    /** Names of all cards the model can detect */
-    val calibratedCards: Set<String>
-        get() = currentHand.values.toSet()
-
-    private var scanJob: Job? = null
+    private const val MAX_HAND_AGE_MS = 2_000L
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-    private var consecutiveNullFrames = 0
+    private val scanMutex = Mutex()
+    private val scanGeneration = AtomicLong()
+    private val matchGeneration = AtomicLong()
+    private var scanJob: Job? = null
+
+    @Volatile
+    private var recognition = HandRecognitionState()
+
+    /** Display-only hand, including a short grace period for missed detections. */
+    val currentHand: Map<Int, String> get() = recognition.displayHand
+
+    /** Only cards actually recognized in the latest fresh frame of this capture session. */
+    val currentVerifiedHand: Map<Int, String>
+        get() = recognition.verifiedHand(
+            SystemClock.elapsedRealtime(), ScreenCaptureService.currentCaptureSessionId(), MAX_HAND_AGE_MS
+        )
+
+    /** Changes across match transitions, capture renewal/loss, and scanner restart. */
+    val matchSessionId: Long get() = recognition.matchSessionId
+
+    val cardToSlot: Map<String, Int>
+        get() = currentVerifiedHand.filterKeys { it in 0..3 }.entries.associate { (slot, card) -> card to slot }
+    val nextCard: String? get() = currentVerifiedHand[4]
+    val isCalibrated: Boolean get() = CardClassifier.isReady
+    val templateCount: Int get() = if (CardClassifier.isReady) 8 else 0
+    val calibratedCards: Set<String> get() = currentHand.values.toSet()
 
     @Volatile
     var diagnosticStatus: String = "Esperando primera captura"
         private set
 
-    @Volatile
-    private var lastMatchFrameMs: Long = 0
-
-    /**
-     * Autopilot must not trust stale cards, a menu screenshot, or a
-     * one-card guess. This is a safety gate, not proof that the model is right.
-     */
     fun hasReliableHand(minCards: Int = 3): Boolean =
-        System.currentTimeMillis() - lastMatchFrameMs < 2_000L &&
-            currentHand.filterKeys { it in 0..3 }.values.distinct().size >= minCards
+        minCards in 1..4 && currentVerifiedHand.filterKeys { it in 0..3 }.values.distinct().size >= minCards
 
-    // ── Match Detection ─────────────────────────────────────────────────
+    private fun clearObservation() {
+        recognition = HandRecognitionState(matchSessionId = matchGeneration.incrementAndGet())
+    }
 
-    /**
-     * Detect if the user is in a match by checking card slot brightness.
-     * Checks slots 0 AND 2 (opposite ends) for robustness — both must be bright.
-     * In-match cards have vivid art (avg brightness 120-180).
-     * Menu/loading/results screens are dark (avg brightness 20-50).
-     */
+    // This brightness heuristic is deliberately conservative. It does not prove
+    // that card art or a previously unseen device layout is recognized correctly.
     private fun isInMatch(frame: Bitmap): Boolean {
         val rois = Coordinates.getCardSlotROIs(frame.width, frame.height)
-        if (rois.size < 3) return false
-
-        // Check two slots for robustness (slot 0 and slot 2)
-        val brightCount = listOf(rois[0], rois[2]).count { roi ->
-            slotBrightness(frame, roi) > MATCH_BRIGHTNESS_THRESHOLD
-        }
-        return brightCount >= 2
+        return listOf(rois[0], rois[2]).all { slotBrightness(frame, it) > MATCH_BRIGHTNESS_THRESHOLD }
     }
 
-    /** Measure average brightness (0-255) of a card slot ROI. */
     private fun slotBrightness(frame: Bitmap, roi: Coordinates.CardSlotROI): Long {
-        val fx = roi.x.coerceIn(0, (frame.width - 1).coerceAtLeast(0))
-        val fy = roi.y.coerceIn(0, (frame.height - 1).coerceAtLeast(0))
-        val fw = roi.w.coerceAtMost((frame.width - fx).coerceAtLeast(1))
-        val fh = roi.h.coerceAtMost((frame.height - fy).coerceAtLeast(1))
-        if (fw <= 0 || fh <= 0) return 0
-
-        val crop = try {
-            Bitmap.createBitmap(frame, fx, fy, fw, fh)
-        } catch (e: Exception) {
-            return 0
+        val fx = roi.x.coerceIn(0, frame.width - 1)
+        val fy = roi.y.coerceIn(0, frame.height - 1)
+        val fw = roi.w.coerceAtMost(frame.width - fx)
+        val fh = roi.h.coerceAtMost(frame.height - fy)
+        if (fw <= 0 || fh <= 0) return 0L
+        val pixels = IntArray(fw * fh)
+        frame.getPixels(pixels, 0, fw, fx, fy, fw, fh)
+        var sum = 0L
+        for (pixel in pixels) {
+            sum += ((pixel shr 16) and 255) + ((pixel shr 8) and 255) + (pixel and 255)
         }
-
-        var brightnessSum = 0L
-        val w = crop.width
-        val h = crop.height
-        for (y in 0 until h) {
-            for (x in 0 until w) {
-                val pixel = crop.getPixel(x, y)
-                brightnessSum += ((pixel shr 16) and 0xFF) +
-                        ((pixel shr 8) and 0xFF) +
-                        (pixel and 0xFF)
-            }
-        }
-        crop.recycle()
-        return brightnessSum / (w * h * 3)
+        return sum / (pixels.size * 3)
     }
 
-    // ── Background Scanner ──────────────────────────────────────────────
-
-    /**
-     * Start continuous hand scanning in background at ~5 FPS.
-     * Updates [currentHand] and [cardToSlot] automatically.
-     *
-     * @param deckCards The 8 deck card names to match against
-     * @param context Android context (unused, kept for API compat)
-     * @param onHandChanged Optional callback when hand state changes
-     */
+    @Suppress("UNUSED_PARAMETER")
     fun startScanning(
         deckCards: List<String>,
         context: Context,
         onHandChanged: ((Map<Int, String>) -> Unit)? = null
     ) {
-        if (scanJob?.isActive == true) {
-            Log.w(TAG, "CARD-ML: Scanning already active")
-            return
-        }
-
-        consecutiveNullFrames = 0
-        currentHand = emptyMap()
-        lastMatchFrameMs = 0L
+        if (scanJob?.isActive == true) return
+        val generation = scanGeneration.incrementAndGet()
+        clearObservation()
         diagnosticStatus = "Iniciando detector de cartas"
-        var matchDetected = false
-        var consecutiveNonMatch = 0
-        Log.i(TAG, "CARD-ML: Starting background scan at ${1000 / SCAN_INTERVAL_MS} FPS")
-
         scanJob = scope.launch {
-            var lastHand = mapOf<Int, String>()
-            val slotMissCount = mutableMapOf<Int, Int>() // slot -> consecutive scans with no detection
-
-            while (isActive) {
-                val frame = ScreenCaptureService.getLatestFrame()
-                if (frame == null || frame.isRecycled) {
-                    consecutiveNullFrames++
-                    if (consecutiveNullFrames >= 3) {
-                        diagnosticStatus = "Captura sin imagen; revisa el permiso de pantalla"
-                    }
-                    if (consecutiveNullFrames == 10) {
-                        Log.e(TAG, "CARD-ML: Screen capture appears dead — no frames for ${10 * SCAN_INTERVAL_MS}ms")
-                    }
-                    delay(SCAN_INTERVAL_MS)
-                    continue
-                }
-                consecutiveNullFrames = 0
-
-                // Safe copy to prevent bitmap recycling crash
-                val safeCopy = try {
-                    frame.copy(Bitmap.Config.ARGB_8888, false)
-                } catch (e: Exception) {
-                    Log.w(TAG, "CARD-ML: Frame copy failed: ${e.message}")
-                    delay(SCAN_INTERVAL_MS)
-                    continue
-                }
-                if (safeCopy == null) { delay(SCAN_INTERVAL_MS); continue }
-
-                try {
-                    // Match detection with exit tracking
-                    if (!matchDetected) {
-                        // A screenshot of this app instead of the GAME is common
-                        // if Android 14/15 screen sharing was set to Single App.
-                        if (!isInMatch(safeCopy)) {
-                            diagnosticStatus = "No veo la arena (${safeCopy.width}x${safeCopy.height}). " +
-                                "Comparte PANTALLA COMPLETA, no solo una app"
-                            delay(SCAN_INTERVAL_MS)
-                            continue
-                        }
-                        matchDetected = true
-                        consecutiveNonMatch = 0
-                        Log.i(TAG, "CARD-ML: Match detected! Starting card classification...")
-                    } else {
-                        // Already in match — check if we've left
-                        if (!isInMatch(safeCopy)) {
-                            consecutiveNonMatch++
-                            diagnosticStatus = "La captura no muestra cartas de la partida"
-                            if (consecutiveNonMatch >= MATCH_EXIT_FRAMES) {
-                                matchDetected = false
-                                consecutiveNonMatch = 0
-                                currentHand = emptyMap()
-                                lastHand = emptyMap()
-                                slotMissCount.clear()
-                                onHandChanged?.invoke(emptyMap())
-                                Log.i(TAG, "CARD-ML: Match ended — cleared hand state")
-                            }
-                            delay(SCAN_INTERVAL_MS)
-                            continue
-                        } else {
-                            consecutiveNonMatch = 0
-                        }
-                    }
-
-                    lastMatchFrameMs = System.currentTimeMillis()
-                    Coordinates.updateFromCapture(safeCopy.width, safeCopy.height)
-
-                    // Classify all 5 card slots using both calibrated templates
-                    // and the legacy 103-class on-device model.
-                    val scanStart = System.currentTimeMillis()
-                    val newScan = CardClassifier.classifyHand(safeCopy, deckCards)
-                    val scanMs = System.currentTimeMillis() - scanStart
-
-                    // Temporal smoothing with decay: keep old value for brief dips
-                    // (dimmed cards, animations) but drop after 5 consecutive misses (~1s).
-                    val merged = lastHand.toMutableMap()
-                    for (slot in 0..4) {
-                        val newCard = newScan[slot]
-                        if (newCard != null) {
-                            merged[slot] = newCard
-                            slotMissCount[slot] = 0
-                        } else {
-                            val misses = (slotMissCount[slot] ?: 0) + 1
-                            slotMissCount[slot] = misses
-                            if (misses > 5) {
-                                // Card unrecognized for >1 second — remove from hand
-                                merged.remove(slot)
-                            }
-                            // If misses <= 5, keep lastHand value (grace period)
-                        }
-                    }
-                    // If a card appears in a DIFFERENT slot now, remove it from old slot
-                    // (handles card cycling after play)
-                    val cardSlots = mutableMapOf<String, Int>()
-                    for ((slot, card) in merged) {
-                        val existing = cardSlots[card]
-                        if (existing != null && newScan.containsKey(slot)) {
-                            if (!newScan.containsKey(existing)) {
-                                merged.remove(existing)
-                            }
-                        }
-                        cardSlots[card] = slot
-                    }
-
-                    val hand = merged.toMap()
-
-                    // Atomic swap of hand state
-                    currentHand = hand
-                    val handCount = hand.filterKeys { it in 0..3 }.size
-                    diagnosticStatus = if (handCount >= 3) {
-                        "Vision: ${handCount}/4 cartas (${safeCopy.width}x${safeCopy.height})"
-                    } else {
-                        "Vision: ${handCount}/4. Pulsa Img para revisar captura " +
-                            "(${safeCopy.width}x${safeCopy.height})"
-                    }
-
-                    if (hand != lastHand) {
-                        lastHand = hand.toMap()
-                        onHandChanged?.invoke(hand)
-                        if (hand.isNotEmpty()) {
-                            val handStr = (0..3).map { hand[it] ?: "?" }.joinToString(" | ")
-                            val nextStr = hand[4] ?: "?"
-                            Log.i(TAG, "CARD-ML: Hand: $handStr | Next: $nextStr (${scanMs}ms)")
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "CARD-ML: Scan error: ${e.message}")
-                } finally {
-                    safeCopy.recycle()
-                }
-
-                delay(SCAN_INTERVAL_MS)
+            // Native model inference is not cancellable midway. A restarted scanner
+            // waits for its predecessor before touching the shared model buffers.
+            scanMutex.withLock {
+                if (generation != scanGeneration.get()) return@withLock
+                scan(deckCards, generation, onHandChanged)
             }
         }
     }
 
-    /** Stop background scanning. */
-    fun stopScanning() {
-        scanJob?.cancel()
-        scanJob = null
-        currentHand = emptyMap()
-        lastMatchFrameMs = 0L
-        diagnosticStatus = "Escaner detenido"
-        Log.i(TAG, "CARD-ML: Scanning stopped")
+    private suspend fun scan(
+        deckCards: List<String>,
+        generation: Long,
+        onHandChanged: ((Map<Int, String>) -> Unit)?
+    ) {
+        var matchDetected = false
+        var consecutiveNonMatch = 0
+        var nullFrames = 0
+        var captureSession = -1L
+        var previousFrameId = -1L
+        var lastHand = emptyMap<Int, String>()
+        var lastDetected = emptyMap<Int, String>()
+        var misses = emptyMap<Int, Int>()
+        while (currentCoroutineContext().isActive && generation == scanGeneration.get()) {
+            val snapshot = ScreenCaptureService.copyLatestSnapshot(MAX_HAND_AGE_MS)
+            if (snapshot == null) {
+                if (nullFrames++ == 0) {
+                    clearObservation()
+                    matchDetected = false
+                    consecutiveNonMatch = 0
+                    captureSession = -1L
+                    lastHand = emptyMap()
+                    lastDetected = emptyMap()
+                    misses = emptyMap()
+                    onHandChanged?.invoke(emptyMap())
+                }
+                diagnosticStatus = "Captura sin imagen reciente; renueva el permiso de pantalla"
+                delay(SCAN_INTERVAL_MS)
+                continue
+            }
+            nullFrames = 0
+            val frame = snapshot.bitmap
+            try {
+                if (captureSession != snapshot.captureSessionId) {
+                    clearObservation()
+                    captureSession = snapshot.captureSessionId
+                    previousFrameId = -1L
+                    matchDetected = false
+                    consecutiveNonMatch = 0
+                    lastHand = emptyMap()
+                    lastDetected = emptyMap()
+                    misses = emptyMap()
+                }
+                if (snapshot.frameId != previousFrameId) {
+                    previousFrameId = snapshot.frameId
+                    if (!isInMatch(frame)) {
+                        if (matchDetected && consecutiveNonMatch == 0) {
+                            // Invalidate in-flight decisions immediately, even though
+                            // the display tolerates brief transitions/animations.
+                            recognition = recognition.copy(
+                                detectedHand = emptyMap(), matchSessionId = matchGeneration.incrementAndGet()
+                            )
+                        }
+                        if (matchDetected) consecutiveNonMatch++
+                        diagnosticStatus = "No veo la arena. Comparte PANTALLA COMPLETA"
+                        if (consecutiveNonMatch >= MATCH_EXIT_FRAMES) {
+                            clearObservation()
+                            matchDetected = false
+                            consecutiveNonMatch = 0
+                            lastHand = emptyMap()
+                            lastDetected = emptyMap()
+                            misses = emptyMap()
+                            onHandChanged?.invoke(emptyMap())
+                        }
+                    } else {
+                        if (!matchDetected || consecutiveNonMatch > 0) {
+                            clearObservation()
+                            matchDetected = true
+                        }
+                        consecutiveNonMatch = 0
+                        Coordinates.updateFromCapture(frame.width, frame.height)
+                        val startedAt = SystemClock.elapsedRealtime()
+                        val newScan = CardClassifier.classifyHand(frame, deckCards)
+                        val merged = HandStateReducer.merge(lastHand, newScan, misses)
+                        currentCoroutineContext().ensureActive()
+                        if (generation != scanGeneration.get() ||
+                            ScreenCaptureService.currentCaptureSessionId() != captureSession
+                        ) continue
+                        recognition = HandRecognitionState(
+                            merged.hand, merged.detected, snapshot.frameId, captureSession,
+                            snapshot.capturedAtElapsedRealtime, recognition.matchSessionId
+                        )
+                        misses = merged.misses
+                        val count = merged.detected.keys.count { it in 0..3 }
+                        diagnosticStatus = "Vision: $count/4 verificadas (${frame.width}x${frame.height})" +
+                            if (count < 3) ". Pulsa Img para revisar captura" else ""
+                        if (merged.hand != lastHand || merged.detected != lastDetected) {
+                            onHandChanged?.invoke(merged.hand)
+                            Log.i(TAG, "CARD-ML: $count verified cards (${SystemClock.elapsedRealtime() - startedAt}ms)")
+                        }
+                        lastHand = merged.hand
+                        lastDetected = merged.detected
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                recognition = recognition.copy(detectedHand = emptyMap())
+                diagnosticStatus = "No se pudo verificar la mano; revisa captura"
+                Log.w(TAG, "CARD-ML: Scan rejected (${e.javaClass.simpleName})")
+            } finally {
+                frame.recycle()
+            }
+            delay(SCAN_INTERVAL_MS)
+        }
     }
 
-    /** Whether background scanning is active */
-    val isScanning: Boolean
-        get() = scanJob?.isActive == true
+    fun stopScanning() {
+        scanGeneration.incrementAndGet()
+        scanJob?.cancel()
+        scanJob = null
+        clearObservation()
+        diagnosticStatus = "Escaner detenido"
+    }
 
-    /** Clean up resources */
+    val isScanning: Boolean get() = scanJob?.isActive == true
+
     fun destroy() {
         stopScanning()
         scope.cancel()

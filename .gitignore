@@ -9,6 +9,7 @@ app/build/
 
 # Large model files (download separately)
 app/src/main/assets/sherpa-onnx-moonshine-base-en-int8/
+app/src/main/assets/sherpa-onnx-whisper-tiny/
 app/src/main/assets/sherpa-onnx-zipformer-en-2023-04-01/*
 !app/src/main/assets/sherpa-onnx-zipformer-en-2023-04-01/bpe.vocab
 app/src/main/assets/silero_vad.onnx

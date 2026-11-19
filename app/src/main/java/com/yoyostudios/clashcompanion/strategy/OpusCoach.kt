@@ -3,26 +3,32 @@ package com.yoyostudios.clashcompanion.strategy
 import android.content.Context
 import android.util.Log
 import com.yoyostudios.clashcompanion.api.GeminiClient
-import com.google.gson.JsonParser
 import com.yoyostudios.clashcompanion.deck.DeckManager
+import com.google.gson.Gson
 import java.io.File
+import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.CancellationException
 
-/**
- * Pre-match deck analyzer using Claude Opus.
- * Generates a strategic playbook JSON that Gemini Flash uses during gameplay (M8).
- *
- * Coach + Player architecture:
- *   Opus (this) = Coach: deep analysis once per deck load, 15-30s
- *   Gemini Flash (M8) = Player: real-time decisions using this playbook, <500ms
- */
+/** Deck analysis through the private Gemini relay. Historical class name kept for compatibility. */
 object OpusCoach {
-
     private const val TAG = "ClashCompanion"
     private const val PLAYBOOK_FILE = "playbook.json"
+    private data class Entry(val deck: String, val json: String)
+    private val stateLock = Any()
+    private val requestEpoch = AtomicLong()
+    @Volatile private var entry: Entry? = null
 
-    /** Cached playbook JSON from the last analysis */
-    var cachedPlaybook: String? = null
-        private set
+    val cachedPlaybook: String?
+        get() = entry?.takeIf {
+            it.deck == PlaybookPolicy.deckKey(DeckManager.currentDeck.map { card -> card.id })
+        }?.json
+
+    /** Every deck assignment invalidates requests, including A -> B -> A transitions. */
+    fun onDeckChanged(cards: List<DeckManager.CardInfo>) = synchronized(stateLock) {
+        requestEpoch.incrementAndGet()
+        val key = PlaybookPolicy.deckKey(cards.map { it.id })
+        if (entry?.deck != key) entry = null
+    }
 
     private val SYSTEM_PROMPT = """
 You are an expert Clash Royale analyst. Analyze this deck for a real-time voice
@@ -50,125 +56,79 @@ Generate a comprehensive strategic playbook as JSON with these sections:
 
 8. "elixir_management": When to push vs defend based on elixir
 
+Use exact card names from the supplied deck. win_conditions must contain objects
+with "card" (one exact deck name) and "strategy" (nonempty text). defense_table
+entries must contain "counter_card" as one exact deck name. card_placement_defaults
+must contain an entry for EACH of the eight exact deck names. Do not invent cards.
+Current elixir and evolution availability are unknown; do not assume either.
 Respond ONLY with valid JSON. No other text.
     """.trimIndent()
 
-    /**
-     * Analyze a deck with Opus and cache the playbook.
-     * Reports progress via the onProgress callback (runs on calling thread).
-     *
-     * @return The playbook JSON string, or null on failure
-     */
     suspend fun analyzeWithProgress(
         deck: List<DeckManager.CardInfo>,
         context: Context,
         onProgress: (String) -> Unit
     ): String? {
-        val deckJson = DeckManager.getDeckJson()
-        val deckNames = deck.joinToString(", ") { it.name }
-
-        onProgress("Analyzing deck with Gemini...")
-        Log.i(TAG, "OPUS: Starting analysis for: $deckNames")
-
+        val cards = deck.toList()
+        if (cards.size != 8 || cards.map { it.id }.distinct().size != 8) return null
+        val key = PlaybookPolicy.deckKey(cards.map { it.id })
+        val epoch = requestEpoch.incrementAndGet()
+        val names = cards.map { it.name }.toSet()
+        fun current(): Boolean = PlaybookPolicy.requestIsCurrent(
+            epoch, requestEpoch.get(), key,
+            PlaybookPolicy.deckKey(DeckManager.currentDeck.map { it.id })
+        )
+        if (!current()) return null
+        onProgress("Analizando mazo con Gemini...")
         return try {
-            val startTime = System.currentTimeMillis()
-
-            val userMessage = "DECK (loaded from game data):\n$deckJson\n\nAnalyze this deck and generate the strategic playbook."
-
             val response = GeminiClient.chat(
                 systemInstruction = SYSTEM_PROMPT,
-                userMessage = userMessage,
+                userMessage = "DECK:\n${Gson().toJson(cards)}\nGenerate a strategic playbook for THIS deck.",
                 maxTokens = 8192,
                 jsonMode = true
             )
-            val result = GeminiClient.cleanJsonResponse(response)
-            JsonParser.parseString(result).asJsonObject // Do not cache incomplete playbooks
-
-            val elapsed = System.currentTimeMillis() - startTime
-
-            // Cache the playbook
-            cachedPlaybook = result
-
-            // Save to internal storage
-            savePlaybook(context, result)
-
-            val previewLen = minOf(result.length, 100)
-            Log.i(TAG, "OPUS: Analysis complete in ${elapsed}ms (${result.length} chars)")
-            onProgress("Playbook ready (${elapsed / 1000}s)")
-
-            result
-        } catch (e: IllegalStateException) {
-            // API key not set
-            Log.w(TAG, "OPUS: ${e.message}")
-            onProgress("Configure Gemini connection")
-            loadFallbackPlaybook(context)
-            null
-        } catch (e: Exception) {
-            Log.e(TAG, "OPUS: Analysis failed: ${e.message}", e)
-            onProgress("Strategy error: ${e.message?.take(50)}")
-            loadFallbackPlaybook(context)
-            null
-        }
-    }
-
-    /**
-     * Save playbook to internal storage for persistence.
-     */
-    private fun savePlaybook(context: Context, playbook: String) {
-        try {
-            val file = File(context.filesDir, PLAYBOOK_FILE)
-            file.writeText(playbook)
-            Log.i(TAG, "OPUS: Playbook saved to ${file.absolutePath}")
-        } catch (e: Exception) {
-            Log.w(TAG, "OPUS: Failed to save playbook: ${e.message}")
-        }
-    }
-
-    /**
-     * Load playbook from internal storage (from previous session).
-     * Returns the playbook string, or null if not found.
-     */
-    fun loadSavedPlaybook(context: Context): String? {
-        try {
-            val file = File(context.filesDir, PLAYBOOK_FILE)
-            if (file.exists()) {
-                val playbook = file.readText()
-                if (playbook.isNotBlank()) {
-                    cachedPlaybook = playbook
-                    Log.i(TAG, "OPUS: Loaded saved playbook (${playbook.length} chars)")
-                    return playbook
-                }
+            val result = PlaybookPolicy.validate(GeminiClient.cleanJsonResponse(response), names).toString()
+            synchronized(stateLock) {
+                if (!current()) return@synchronized null
+                entry = Entry(key, result)
+                savePlaybook(context, PlaybookPolicy.encode(key, result, names))
+                onProgress("Estrategia lista")
+                result
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "OPUS: Failed to load saved playbook: ${e.message}")
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            if (current()) {
+                // An older deck's strategy is never used as fallback for this deck.
+                loadSavedPlaybook(context)
+                onProgress("Estrategia no disponible; revisa la conexion Gemini")
+                Log.w(TAG, "Strategy analysis failed (${error.javaClass.simpleName})")
+            }
+            null
         }
-        return null
     }
 
-    /**
-     * Load or create a fallback playbook when Opus is unavailable.
-     * Uses a minimal generic playbook.
-     */
-    private fun loadFallbackPlaybook(context: Context): String {
-        // Try loading saved playbook from previous session
-        val saved = loadSavedPlaybook(context)
-        if (saved != null) return saved
-
-        // Generic fallback
-        val fallback = """
-        {
-            "archetype": "Generic deck - play reactively",
-            "win_conditions": [{"card": "Use highest-DPS troop", "strategy": "Push opposite lane after defending"}],
-            "defense_table": {},
-            "offense_plays": [{"sequence": "Tank + support behind", "placement": "back center then bridge"}],
-            "card_placement_defaults": {},
-            "synergies": [],
-            "never_do": ["Don't overcommit elixir", "Don't ignore opposite lane pushes"],
-            "elixir_management": "Defend first, counter-push with surviving troops"
+    private fun savePlaybook(context: Context, document: String) {
+        try {
+            val temporary = File(context.filesDir, "$PLAYBOOK_FILE.tmp")
+            temporary.writeText(document)
+            check(temporary.renameTo(File(context.filesDir, PLAYBOOK_FILE))) { "No se pudo guardar estrategia" }
+        } catch (error: Exception) {
+            Log.w(TAG, "Strategy persistence failed (${error.javaClass.simpleName})")
         }
-        """.trimIndent()
+    }
 
-        cachedPlaybook = fallback
-        return fallback
+    fun loadSavedPlaybook(context: Context): String? = synchronized(stateLock) {
+        val deck = DeckManager.currentDeck.toList()
+        val key = PlaybookPolicy.deckKey(deck.map { it.id })
+        val loaded = try {
+            val file = File(context.filesDir, PLAYBOOK_FILE)
+            if (file.isFile) PlaybookPolicy.decode(file.readText(), key, deck.map { it.name }.toSet())
+            else null
+        } catch (_: Exception) { null }
+        if (loaded != null) entry = Entry(key, loaded)
+        else if (entry?.deck != key) entry = null
+        // If absent, the router retains its general tactical fallback without a fake ready state.
+        loaded
     }
 }

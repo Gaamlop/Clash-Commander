@@ -7,6 +7,9 @@ on:
     branches:
       - main
       - master
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
@@ -25,6 +28,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Test private Gemini relay
+        run: node --test backend/worker.test.mjs
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
@@ -40,8 +51,19 @@ jobs:
         run: |
           printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
-      - name: Build APK
-        run: ./gradlew assembleDebug
+      - name: Test, lint and build APK
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug
+
+      - name: Upload verification reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Clash-Commander-Verification
+          path: |
+            app/build/reports/tests/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
+            app/build/reports/lint-results-debug.xml
+          if-no-files-found: ignore
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

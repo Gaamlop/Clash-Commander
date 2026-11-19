@@ -200,6 +200,26 @@ class OverlayManager(private val context: Context) {
 
         layout.addView(buttonRow)
 
+        // The autonomous mode can be controlled without starting the microphone.
+        val tacticalRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf(
+            "Defender" to { CommandRouter.handleTranscript("defend", 0) },
+            "Atacar I" to { CommandRouter.handleTranscript("push left", 0) },
+            "Atacar D" to { CommandRouter.handleTranscript("push right", 0) },
+            "Auto" to { CommandRouter.handleTranscript("autopilot", 0) },
+            "Parar" to { CommandRouter.stopAutopilot() }
+        ).forEach { (label, action) ->
+            tacticalRow.addView(Button(context).apply {
+                text = label
+                textSize = 10f
+                minWidth = 0; minimumWidth = 0
+                minHeight = 0; minimumHeight = 0
+                setPadding(8, 6, 8, 6)
+                setOnClickListener { action() }
+            })
+        }
+        layout.addView(tacticalRow)
+
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -305,6 +325,10 @@ class OverlayManager(private val context: Context) {
         CommandRouter.clearQueue()
         CommandRouter.clearRules()
         CommandRouter.stopAutopilot()
+        SpeechService.instance?.apply {
+            stopListening()
+            onTranscript = null
+        }
         // Remove minimized button if present
         minimizedView?.let {
             try { windowManager.removeView(it) } catch (_: Exception) {}
@@ -372,9 +396,8 @@ class OverlayManager(private val context: Context) {
             updateStatus("IMG: Disponible desde Android 10")
             return
         }
-        val frame = ScreenCaptureService.getLatestFrame()
         val snapshot = try {
-            frame?.copy(Bitmap.Config.ARGB_8888, false)
+            ScreenCaptureService.copyLatestSnapshot()?.bitmap
         } catch (e: Exception) {
             Log.w(TAG, "IMG: Failed copying screen frame: ${e.message}")
             null

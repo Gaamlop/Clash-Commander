@@ -1,287 +1,252 @@
 <p align="center">
-  <img src="logo.png" alt="Clash Commander Logo" width="150"/>
+  <img src="logo.png" alt="Clash Commander" width="150"/>
 </p>
 
-# Clash Commander
+# Clash Commander 1.4.1 experimental
 
-**Play Clash Royale with your voice.** Five-tier AI command routing system combining on-device speech recognition, real-time computer vision, and cloud LLM strategic reasoning — running on a $300 mid-range Android phone.
+Asistente Android para jugar Clash Royale mediante voz, reconocimiento local de
+cartas y decisiones tácticas de Gemini. Continúa el proyecto original de
+[youssofal](https://github.com/youssofal/Clash-Commander), creado para el Supercell
+Global AI Game Hack de febrero de 2026.
 
-Built solo in 48 hours for the [Supercell Global AI Game Hack](https://ailab.supercell.com/) (Feb 6-8, 2026).
-
----
-
-## NUEVO EN ESTE FORK: Gemini sin claves dentro de la APK
-
-La version 1.1 agrega **GEMINI AUTOPILOT** en la pantalla de Clash Commander.
-Se configura una vez con la URL de tu propio servidor protegido y un token
-privado. La clave de Google se guarda solo como secreto en el servidor; ni
-la clave de Google ni los secretos de GitHub se agregan al APK.
-
-**Guia en espanol:** [backend/README.md](backend/README.md).
-**Codigo del servidor:** [backend/worker.js](backend/worker.js).
-
-Para usar las funciones de voz normales no necesitas servidor. Autopilot y el
-analisis de mazos con Gemini requieren instalar/configurar primero tu Worker.
-La APK publicada originalmente por otro autor es distinta a la compilada
-desde este fork.
-
----
-
-## Download (Pre-Built APK)
-
-**[Download Clash Commander v1.1 APK](https://github.com/youssofal/Clash-Commander/releases/download/v1.0.0/clash-commander-v1.1.apk)** (~456MB, includes all on-device models)
-
-Just install and play — no build required. Voice commands work fully offline. Cloud features (Smart Path, Autopilot) require API keys in `local.properties` if building from source.
-
----
+Este fork conserva los comandos directos, las colas, Smart Path, Autopilot,
+captura de pantalla, overlay y análisis previo de mazos. La versión 1.3 incorpora
+reconocimiento visual experimental y diagnósticos de captura. La revisión 1.4.1
+corrige caducidad de imágenes, cancelación de decisiones y acceso a la renovación
+de captura, e incorpora voz española y tres perfiles de mazo. **Compilar la APK
+no demuestra que el reconocimiento o Autopilot funcionen correctamente en una
+partida real.** No hay una tasa de victorias ni una latencia de juego validada.
 
 <p align="center">
-  <img src="app-screenshot.png" alt="Clash Commander UI" width="300"/>
+  <img src="app-screenshot.png" alt="Interfaz de Clash Commander" width="300"/>
 </p>
 
----
+## Funciones
 
-## What It Does
+| Función | Uso | Conexión |
+|---|---|---|
+| Fast Path | Juega la carta y zona indicadas por voz | Local |
+| Queue Path | Encadena órdenes y espera a que una carta entre en mano | Local |
+| Smart Path | Gemini interpreta una intención como defender o atacar | Worker privado + Gemini |
+| Autopilot | Gemini propone jugadas durante la partida; puede esperar | Worker privado + Gemini |
+| Estrategia del mazo | Genera un plan antes de la partida | Worker privado + Gemini |
+| Diagnóstico de captura | Muestra estado de captura y permite guardar una imagen de prueba | Local |
 
-Clash Commander is an Android overlay that sits on top of Clash Royale, listens to your voice, and plays cards for you. Say "knight left" and the card plays in under 200ms. Say "defend" and the AI picks the best defensive card. Say "autopilot" and the AI plays the entire match.
+Los modelos de voz se ejecutan en el dispositivo. El selector de idioma ofrece
+español con Whisper y mantiene inglés con Zipformer; el parser admite alias de
+cartas y zonas. El idioma seleccionado debe coincidir con la voz utilizada.
+La precisión y el tiempo de respuesta dependen del teléfono, el ruido, los
+modelos y, para las decisiones remotas, la conexión.
 
-It's also an **accessibility tool** — enabling players with motor impairments to play Clash Royale competitively using only their voice.
+## Instalación y configuración
 
-## Five AI Technologies, One System
+La APK de este fork se obtiene de las ejecuciones correctas de
+[GitHub Actions](https://github.com/Gaamlop/Clash-Commander/actions/workflows/android.yml),
+artefacto **Clash-Commander-APK**, o compilando este repositorio. Los APK del
+proyecto original tienen otra configuración y no equivalen a esta versión.
+Consulta [RELEASE_INSTRUCTIONS.md](RELEASE_INSTRUCTIONS.md).
 
-| Technology | What It Does | Where It Runs |
-|-----------|-------------|---------------|
-| **Zipformer STT** (sherpa-onnx) | Voice to text in ~160ms | On-device (CPU) |
-| **Silero VAD** | Detects when you start/stop speaking | On-device (CPU) |
-| **YOLOv8n-cls** | Identifies which cards are in your hand | On-device (PyTorch Mobile) |
-| **Claude Opus 4.6** | Deep pre-match deck strategy analysis | Cloud (Anthropic API) |
-| **Gemini 3 Flash** | Real-time tactical decisions during gameplay | Cloud (Google AI API) |
+Requisitos: Android 9 o posterior en ARM64, Clash Royale y permisos de accesibilidad,
+overlay y captura. Micrófono y motor de voz son opcionales para usar los botones
+del panel y Autopilot. El dispositivo objetivo de validación es Nothing Phone (1)
+con Android 15. En Android 13 o posterior, una instalación externa
+puede requerir habilitar **Permitir ajustes restringidos** en la ficha del sistema
+de Clash Commander antes de activar accesibilidad.
 
-## Command Tiers
+1. Abre Clash Commander y comparte tu mazo desde Clash Royale hacia la app.
+   Deben cargarse exactamente ocho cartas distintas; una carta desconocida o un
+   enlace incompleto produce un error y no instala un mazo parcial.
+2. Habilita **Screen Overlay**, **Tap Control** y **Microphone** desde la lista de
+   preparación. Selecciona el idioma de voz y carga **Voice Engine**.
+3. Autoriza **Screen Capture** y selecciona **Pantalla completa**, para poder
+   pasar de la app a Clash Royale durante la captura.
+   Puedes volver a autorizar la captura desde la app sin reinstalarla.
+4. Para funciones Gemini, configura **GEMINI AUTOPILOT** como se indica abajo.
+5. Abre el overlay con **LAUNCH COMMANDER** y entra en una
+   partida de prueba. Comprueba que la captura esté reciente y que las cartas
+   reconocidas correspondan a las posiciones visibles antes de usar automatización.
+   Usa **Defender**, **Atacar I/D**, **Auto** o **Parar**; activa **Listen** si
+   quieres controlar por voz. **Parar** cancela también una decisión Smart pendiente.
 
-| Tier | Example | Latency | How It Works |
-|------|---------|---------|-------------|
-| **Fast Path** | "knight left", "fireball center" | ~170ms | On-device STT + parser + tap injection. No network. |
-| **Queue Path** | "knight left then archers right" | ~170ms + wait | Buffers commands, auto-plays when card cycles into hand. |
-| **Smart Path** | "defend", "follow up", "push right" | ~1.5s | Gemini Flash picks the optimal card using Opus playbook. |
-| **Autopilot** | "autopilot" / "play for me" | ~4s/play | AI plays the entire match. Toggle on/off by saying "autopilot". |
+Seleccionar un mazo en Clash Commander no modifica por sí solo el mazo activo
+en Clash Royale: ambos deben coincidir, incluidas las formas de las cartas.
 
-## Quick Start (Pre-Built APK)
+## Gemini sin claves dentro de la APK
 
-No build needed — just install and play. Voice commands work **fully offline**.
+El teléfono se comunica por HTTPS con un Cloudflare Worker privado. La clave de
+Google se guarda exclusivamente como secreto del Worker. El teléfono usa un
+token de acceso diferente, almacenado cifrado mediante Android Keystore.
 
-### Step 1: Install the APK
+Sigue la [guía del servidor en español](backend/README.md). En la app se
+introducen **la URL HTTPS del Worker y su token de acceso**, nunca la clave de
+Google. No hace falta recompilar la APK para cambiar el emparejamiento.
 
-Download the APK from the [Releases page](https://github.com/youssofal/Clash-Commander/releases/tag/v1.0.0) and install it on your Android phone. You may need to allow "Install from unknown sources" in your settings.
+La ruta de salud comprueba el emparejamiento; no llama a Google y por sí sola no
+demuestra que el modelo pueda responder. La ruta Gemini realiza las solicitudes
+de estrategia o visión. Los fotogramas enviados para decisiones remotas pasan
+por tu Worker y llegan a Gemini.
 
-> **Android 13+ users:** After installing, go to **Settings > Apps > Clash Commander > ⋮ (three dots) > Allow restricted settings**. This is required for the Overlay and Accessibility permissions to work.
+No guardes claves ni tokens en el repositorio, capturas de ajustes, comentarios o
+conversaciones. El archivo local de propiedades se usa para la ruta del SDK;
+esta compilación deja vacías las claves de proveedor de BuildConfig. Los
+clientes Anthropic y Roboflow heredados siguen en el código, pero las funciones
+Gemini del fork utilizan el proxy configurado.
 
-### Step 2: Open the App and Complete the Checklist
+## Reconocimiento visual y mazos
 
-When you open Clash Commander, you'll see a setup checklist with 6 items. Tap each one to set it up:
+El clasificador empaquetado contiene 103 salidas, correspondientes a 102 claves
+distintas. La cobertura del catálogo de cartas es mayor que la del modelo.
+Además hay huellas experimentales de ocho cartas: Minion Giant, Barbarian
+Barrel, Wizard, Goblin Hut, Royal Ghost, Electro Spirit, Skeletons y Lightning, obtenidas de una repetición concreta.
+Que una carta aparezca en estas listas no garantiza reconocerla en todos los
+teléfonos, resoluciones, animaciones o variantes evolucionadas.
 
-| # | Step | What to Do |
-|---|------|------------|
-| 1 | **Share Deck from Clash Royale** | Tap to open Clash Royale. Go to your battle deck, tap **Share**, and select **Clash Commander** from the share sheet. Your 8 cards will load into the app. |
-| 2 | **Screen Overlay** | Tap to open system settings. Find **Clash Commander** and toggle **Allow display over other apps** ON. Press back to return. |
-| 3 | **Tap Control** | Tap to open Accessibility settings. Find **Clash Commander**, tap it, and toggle it ON. Confirm the permission dialog. Press back to return. |
-| 4 | **Microphone** | Tap to grant microphone permission. Select **Allow**. |
-| 5 | **Screen Capture** | Tap to start screen capture. A system dialog will ask to record your screen — tap **Start now**. |
-| 6 | **Voice Engine** | Tap to start the speech recognition engine. This loads the on-device AI model (~7 seconds). Wait until it shows **READY**. |
+Una predicción débil debe permanecer desconocida. Smart Path y Autopilot exigen
+una mano reciente reconocida antes de actuar. Las formas de héroe, las habilidades
+y las evoluciones requieren validación propia; no se consideran cubiertas solo
+porque exista la carta base en el modelo. La pantalla de mazo muestra las
+limitaciones de reconocimiento.
 
-Once all 6 items show a green checkmark, the **LAUNCH COMMANDER** button at the bottom activates.
+Las recomendaciones de mazos deben indicar composición exacta, evoluciones,
+héroes, fuente, fecha de consulta y modo de juego. Las estadísticas de jugadores
+de una web no son estadísticas de este Autopilot; una variante con otra forma de
+carta tampoco hereda los resultados de la variante original.
 
-### Step 3: Launch and Play
+La app incluye tres variantes exactas sin héroes consultadas en RoyaleAPI el
+19/11/2026, ventana Ranked de siete días. Sus cartas base están en el clasificador;
+las formas evolucionadas todavía requieren validación visual:
 
-1. Tap **LAUNCH COMMANDER** — a small floating overlay appears on screen
-2. Tap **Listen** on the overlay to start voice recognition
-3. Switch to Clash Royale and start a match
-4. Say commands like **"knight left"** or **"fireball center"** — the AI places cards for you in ~170ms
+| Perfil | Evoluciones requeridas | Fuente |
+|---|---|---|
+| Esqueleto gigante · Ariete | Ariete de batalla, Leñador | [Composición](https://royaleapi.com/decks/stats/arrows,bandit,battle-ram-ev1,electro-wizard,furnace,giant-skeleton,heal-spirit,lumberjack-ev1) |
+| Mortero · Carro de cañón | Mortero, Barril de esqueletos | [Composición](https://royaleapi.com/decks/stats/barbarian-barrel,cannon-cart,fireball,goblin-gang,ice-wizard,mortar-ev1,rascals,skeleton-barrel-ev1) |
+| Cementerio · Choza | Horno, Caballero | [Composición](https://royaleapi.com/decks/stats/barbarian-barrel,furnace-ev1,goblin-hut,graveyard,ice-wizard,knight-ev1,poison,skeletons) |
 
-### What Works Without API Keys
+Puedes seleccionar Clásico, Gran desafío o Ranked para aportar ese contexto al
+plan táctico. Estas composiciones tienen datos de ranked, no evidencia suficiente
+para afirmar que sean las mejores de desafíos ni que este Autopilot gane con ellas.
+La preparación local no equipa automáticamente cartas o evoluciones dentro del juego.
 
-| Feature | Works Offline? | Example |
-|---------|---------------|---------|
-| **Fast Path** (direct card commands) | Yes | "knight left", "archers right", "fireball center" |
-| **Queue Path** (chained commands) | Yes | "knight left then archers right" |
-| **Smart Path** (AI tactical decisions) | No — needs Gemini API key | "defend", "push right" |
-| **Autopilot** (full AI play) | No — needs Gemini API key | "autopilot", "play for me" |
-| **Strategy Analysis** | No — needs Anthropic API key | Pre-match deck analysis |
+## Órdenes de voz
 
-> **Fast Path and Queue Path cover most gameplay.** You tell the app which card to play and where — it handles the tapping. No API keys required.
+En inglés se conservan órdenes como:
 
----
+~~~text
+knight left
+fireball top right
+giant bottom left
+knight left then archers right
+defend
+push right
+follow up
+autopilot
+stop
+~~~
 
-## Building from Source
+Con español seleccionado, utiliza los equivalentes de cartas y zonas admitidos
+por el parser, por ejemplo **caballero izquierda** o **bola de fuego derecha**.
+Los comandos para activar y detener Autopilot también están disponibles en el
+idioma seleccionado. Verifica la transcripción del overlay durante la prueba.
+Ejemplos: **defiende derecha**, **ataca izquierda**, **piloto automático**,
+**juega solo**, **detente** y **para, por favor**.
 
-If you want Smart Path, Autopilot, or strategy analysis, you need to build from source with API keys.
+| Zona inglesa | Colocación | Expresiones equivalentes |
+|---|---|---|
+| left / right | Puente izquierdo / derecho | izquierda / derecha |
+| center | Centro de la arena | centro / medio |
+| top left / top right | Torre enemiga izquierda / derecha | arriba izquierda / arriba derecha |
+| bottom left / bottom right | Detrás de tu torre | abajo izquierda / abajo derecha |
+| back | Detrás de tu rey | atrás |
+| front left / front right | Posición ofensiva tras el puente | según alias del parser |
+| my left / my right | Tu torre de princesas | según alias del parser |
+| his king | Rey enemigo | según alias del parser |
 
-### Prerequisites
+La inyección de gestos usa un servicio de accesibilidad con comprobación de
+toque y calibración según el tamaño de captura. Una carta seleccionada no
+equivale a una colocación confirmada: pueden faltar elixir o condiciones de juego.
 
-- Android Studio or Gradle
-- Android phone (tested on Samsung Galaxy A35, Android 16)
-- Clash Royale installed
+## Compilar desde el código
 
-### 1. Download STT Model Assets
+Se necesita JDK 17, Android SDK 35, acceso a las dependencias y un teléfono para
+la validación funcional. Usa el wrapper incluido y no agregues secretos al APK.
 
-The speech recognition model (~180MB) is too large for git. Run the bootstrap script:
-
-**macOS / Linux:**
-```bash
-./scripts/bootstrap_sherpa_deps.sh
-```
-
-**Windows (PowerShell):**
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap_sherpa_deps.ps1
-```
-
-### 2. Configure API Keys (Optional)
-
-Copy the example and add your keys:
-```bash
-cp local.properties.example local.properties
-```
-
-Edit `local.properties`:
-```properties
-ANTHROPIC_API_KEY=sk-ant-...    # For deck strategy analysis (Claude Opus)
-GEMINI_API_KEY=AIza...          # For Smart Path + Autopilot (Gemini Flash)
-```
-
-> Without keys, the app still works — Fast Path and Queue Path are fully on-device. Smart Path and Autopilot will show a friendly message asking for keys.
-
-### 3. Build and Install
-
-```bash
+~~~bash
+git clone https://github.com/Gaamlop/Clash-Commander.git
+cd Clash-Commander
+bash scripts/bootstrap_sherpa_deps.sh
 ./gradlew assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
+~~~
 
-Then follow the same setup checklist from Step 2 above.
+En Windows, el bootstrap disponible es:
 
-## Architecture
+~~~powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap_sherpa_deps.ps1
+~~~
 
-```
-Microphone -> Silero VAD -> Zipformer STT -> Command Parser -> Router
-                                                                  |
-                              +------------------+----------------+--------+
-                              |                  |                |        |
-                          FAST PATH         QUEUE PATH      SMART PATH  AUTOPILOT
-                          (on-device)       (on-device)     (Gemini)    (Gemini)
-                           ~170ms          ~170ms+wait       ~1.5s      ~4s/play
-                              |                  |                |        |
-                              +------------------+----------------+--------+
-                                                  |
-                                        AccessibilityService
-                                          safeTap() / playCard()
-                                                  |
-                                           Clash Royale
-```
+El bootstrap descarga las bibliotecas nativas y modelos de voz que no se
+versionan completos en Git. Configura la ruta del SDK mediante las variables
+del entorno de Android o un archivo local.properties ignorado por Git.
 
-**Pre-match:** Claude Opus 4.6 analyzes your deck and generates a strategic playbook (defense table, synergies, placement defaults). This playbook is injected into every Gemini Flash call as context.
+Verificaciones automáticas:
 
-**During match:** YOLOv8n-cls scans your hand at 5 FPS to identify which cards are available. The command router picks the fastest execution path for each voice command.
+~~~bash
+node backend/worker.test.mjs
+./gradlew testDebugUnitTest lintDebug assembleDebug
+~~~
 
-## Voice Commands
+Smart y Autopilot envían arena y HUD del mismo fotograma. El elixir que lee Gemini
+es una inferencia visual, no un sensor calibrado. Autopilot espera si falta una
+cifra legible o el coste de la carta excede lo observado. Las respuestas que tardan
+más de seis segundos, cambian de sesión/partida/mazo o se cancelan no ejecutan jugadas.
 
-Say **"[card] [zone]"** to play a card. For example: **"knight left"**, **"fireball top right"**.
+## Arquitectura
 
-### Zones
+~~~text
+Micrófono → Silero VAD → STT español/inglés → parser → CommandRouter
+                                                    ├─ Fast Path
+                                                    ├─ Queue Path
+MediaProjection → detector de mano ──────────────────┼─ Smart Path → Worker → Gemini
+                                                    └─ Autopilot → Worker → Gemini
+                                                             ↓
+                                                AccessibilityService → gestos
+~~~
 
-| Zone | Where It Places | Aliases |
-|------|----------------|---------|
-| **left** | Left bridge | "left bridge", "bridge left" |
-| **right** | Right bridge | "right bridge", "bridge right" |
-| **center** | Center of arena | "middle", "mid" |
-| **top left** | Enemy left tower | "left tower", "enemy left", "his left" |
-| **top right** | Enemy right tower | "right tower", "enemy right", "his right" |
-| **bottom left** | Behind your left tower | "back left", "behind left", "defend left" |
-| **bottom right** | Behind your right tower | "back right", "behind right", "defend right" |
-| **back** | Behind your king tower | "behind", "back center", "behind king" |
-| **front left** | Offensive left (past bridge) | — |
-| **front right** | Offensive right (past bridge) | — |
-| **my left** | Your left princess tower | "my left tower" |
-| **my right** | Your right princess tower | "my right tower" |
-| **his king** | Enemy king tower | "their king", "opponent king" |
+Kotlin y Jetpack Compose proporcionan la interfaz y el overlay; sherpa-onnx
+ejecuta voz/VAD; PyTorch Mobile Lite ejecuta el clasificador; OkHttp conecta con
+el proxy. La estrategia previa del mazo aporta contexto a las decisiones.
 
-### Command Examples
+Las piezas principales están en app/src/main/java/com/yoyostudios/clashcompanion/:
+MainActivity.kt, capture/, detection/, speech/, command/, accessibility/,
+overlay/, deck/, strategy/, api/ y util/. El backend está en backend/.
 
-```
-"knight left"                  → plays Knight at left bridge
-"fireball top right"           → plays Fireball at enemy right tower
-"arrows center"                → plays Arrows at center
-"giant bottom left"            → places Giant behind your left tower
-"musketeer back"               → places Musketeer behind king tower
-"mini pekka front right"       → places Mini P.E.K.K.A past right bridge
-"archers my left"              → places Archers at your left tower
-"knight left then archers right" → plays Knight, then queues Archers
-"fireball his king"            → plays Fireball at enemy king tower
-```
+## Validación pendiente y límites
 
-### Special Commands (require API keys)
+- Probar captura y permisos en teléfonos reales, incluidos cambios de resolución,
+  orientación, captura parcial y reautorización.
+- Medir reconocimiento por carta y posición sobre grabaciones distintas de las
+  usadas para obtener las huellas; incluir errores, cartas desconocidas y formas.
+- Validar voz española e inglesa en dispositivos reales y ambientes con ruido.
+- Verificar Smart Path, Autopilot y parada durante solicitudes remotas y cambios
+  de mano; comprobar el efecto real de los gestos en la partida.
+- Validar elixir, tiempo de partida y condiciones tácticas. La estimación del
+  modelo remoto no sustituye una medición confirmada del estado del juego.
+- Investigar el bloqueo de gestos documentado en Android 15/16 cuando el usuario
+  toca la pantalla durante una orden; evitar asumir que compilar lo resuelve.
 
-```
-"defend"                       → AI picks best defensive card
-"push right"                   → AI picks offensive card for right lane
-"follow up"                    → AI supports last played card, same lane
-"autopilot" / "play for me"   → AI plays the entire match
-"stop"                         → Stops autopilot
-```
+La CI histórica de 1.3 ejecuta assembleDebug: demuestra que esa revisión
+compila, no que haya pasado una partida completa. La firma debug puede variar
+entre ejecuciones; una reinstalación exigida por cambio de firma borra ajustes
+locales, incluido el emparejamiento Gemini.
 
-## Tech Stack
+## Licencia
 
-- **Language:** Kotlin
-- **UI:** Jetpack Compose (Material 3) with Clash Royale-themed design system
-- **STT:** sherpa-onnx with Zipformer Transducer (int8) + Silero VAD + hotword biasing
-- **Hand Detection:** YOLOv8n-cls (103 card classes, 98.1% val accuracy, ~3ms inference)
-- **Strategy:** Claude Opus 4.6 (pre-match) + Gemini 3 Flash (real-time)
-- **Input Injection:** Android AccessibilityService with touch-state gating
-- **Screen Capture:** MediaProjection API
+[MIT](LICENSE). Proyecto independiente, sin afiliación con Supercell. Respeta las
+condiciones del juego.
 
-## Known Issues
+## Reglas tácticas y pendientes
 
-- **Android 15/16 gesture freeze:** If you touch the screen while a voice command is executing, the gesture system may freeze. Hands-free operation is recommended — that's the whole point.
-- **STT accuracy:** Some card names are challenging for the model. Giant and Arrows have lower recognition rates. The system includes 180+ aliases and 70+ compound aliases for STT misrecognitions.
-- **No elixir tracking:** The system doesn't read your elixir bar. Cards may fail to play if you don't have enough elixir.
-
-## Project Structure
-
-```
-app/src/main/java/com/yoyostudios/clashcompanion/
-├── MainActivity.kt              # Compose UI, permissions, deck loading
-├── accessibility/
-│   └── ClashCompanionAccessibilityService.kt  # Tap injection (safeTap)
-├── capture/
-│   └── ScreenCaptureService.kt  # MediaProjection frames
-├── speech/
-│   └── SpeechService.kt        # sherpa-onnx STT pipeline
-├── detection/
-│   ├── HandDetector.kt          # Background hand scanning at 5 FPS
-│   └── CardClassifier.kt       # YOLOv8n-cls inference
-├── command/
-│   ├── CommandRouter.kt         # Five-tier routing + Autopilot
-│   └── CommandParser.kt        # Fuzzy matching + alias resolution
-├── strategy/
-│   └── OpusCoach.kt            # Claude Opus deck analysis
-├── api/
-│   ├── GeminiClient.kt          # Gemini 3 Flash API
-│   ├── AnthropicClient.kt      # Claude API wrapper
-│   └── RoboflowClient.kt      # Roboflow vision API
-├── deck/
-│   └── DeckManager.kt          # Deck share link parsing
-├── overlay/
-│   └── OverlayManager.kt       # Floating overlay HUD
-├── ui/                          # Compose theme + components
-└── util/
-    ├── Coordinates.kt           # 1080x2340 zone map (40+ aliases)
-    └── CardAliases.kt          # 180+ card aliases for STT
-```
-
-## License
-
-MIT
-
-## Disclaimer
-
-Hackathon prototype built for the Supercell Global AI Game Hack. Respect Supercell's Terms of Service. Use at your own risk.
+Se reconocen perfiles Ice Bow, Miner Control y el Logbait de Hypno compartido por
+el usuario. Sus filtros de elixir, amenazas y carriles se prueban con escenarios
+explícitos. Importa el mazo real para activar el perfil correspondiente.
+Consulta [avance, pruebas y errores pendientes](docs/DEVELOPMENT_STATUS.md).

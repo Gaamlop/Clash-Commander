@@ -26,6 +26,8 @@ object AiConnection {
     private lateinit var appContext: Context
 
     private val client = OkHttpClient.Builder()
+        .followRedirects(false)
+        .followSslRedirects(false)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .build()
@@ -85,6 +87,13 @@ object AiConnection {
             if (!response.isSuccessful) {
                 throw IllegalStateException("Servidor IA: HTTP " + response.code)
             }
+            val body = response.body?.string() ?: ""
+            val health = try {
+                com.google.gson.JsonParser.parseString(body).asJsonObject
+            } catch (_: Exception) {
+                throw IllegalStateException("El servidor no devolvio un estado de conexion valido")
+            }
+            check(health.get("ok")?.asBoolean == true) { "El servidor no confirma el emparejamiento" }
         }
     }
 
