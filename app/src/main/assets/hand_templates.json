@@ -1,6 +1,6 @@
 {
   "size": 12,
-  "notes": "Experimental card-only visual fingerprints from the owner's 2026-11-19 match recording. No raw gameplay footage is stored.",
+  "notes": "Experimental low-resolution visual fingerprints based on the owner's gameplay samples, including Nov 19 screenshots; no raw gameplay footage stored. Accuracy is device/theme dependent.",
   "templates": [
     {
       "name": "Minion Giant",
@@ -21,6 +21,18 @@
     {
       "name": "Royal Ghost",
       "rgb": "O0F5Sj9qZGJ+fXuIqJ+WtKuPxb+im5qWbnF+SUNYMyBHLTJrZ2Jdr6WVzsKg8Oiy+OWb37998NibwrqI29zAtcrOgZmkW15rfH11x7F4wq9/1dmyzM6uwb+qwMS7qr2/o8bBXqfDSZGtU2FtPFVtk7vHqNDgb5TDapDNg67mk8H3nsz/v+H8nMbZQoGhQlFhPFdvnsnn2/P7x93rxtfqlrLUiK7XucjZ4+3yn8TaQ32iRVNiR2N7kr7XrtLofIawbnabcJbLnMTydoSrjJ7GmsbgUoCkP0teepWhkMPeoM7rgp7VepnSjrHnqcTzr8vypb7p5/n8wdXjPU1igZ2on83wqMzonMbrlLTWhJq6qrvZscff1+z36fv+1eLtRVFoh52sstLrt9nsstryus/pudbky+zw0+f61eT25PX71ebtWGJ0iJiltM3kuNjnwt3y0ervyJ7W0GHRzLza5/X63enz1+XsbXaBlJWdwtPm1Of13fD5t2O8rmqp4HratWO+3fDt7O/10tvhYWVrVl1tdXWApKmtvrbHswuvspax0KXKxze/sL2+mJWbaW11PUpe"
+    },
+    {
+      "name": "Electro Spirit",
+      "rgb": "UWKC6vP68Pf59fb2+/H//+//+Pn3+vP/9/f64Pr95O3y4urzJ0yaIVCb22/2snv3wFrx43n155Dz7Ir386X64O/5gtz0LDFJKWi4mrj1p17pcjrlhETwmFb3p2X/qHD/sX/74On/EGKaMC9GMInJtrj0ZlDgWzTqcD/7gEj+jFf/mm7+mnP6rqL94/P64+7pKZK7U7npQijFSy3nWzb5WTj/2jP/zhD4mB76kWn/3uj6hLK6JZ65jH3SPyDEVyDhXCr0TjP5/z//9/3+t1Pd3Pf+6vX/y73ahXfEt83mRCLHlRHn7fP+QCrjYT335ev/2v38iHvUZT7ZXTbZKB+VSlGlwNr31/z2x/v0q7vsRjqPnn++RBF1URV8UCTJd1LcNR+fOo/iPBiDThJ9TxV5URt7Vx59WSF+UiOC1bf4MiO9VzS9R3/nKW7bdHTRTieWjl+uWih7cwZ1nGy1RiKlLxuhWT3He0StNXPbG2/UN6v9U4PSQwl6lmmP3bnclRSXIxiCW0m4JrPgQ4S+MXrjJW7mF27aMZj9vx3Cri+s2FzO/R7lZIHlKZvZF2+/LFqf"
+    },
+    {
+      "name": "Skeletons",
+      "rgb": "NlZo4ezw7vL68Pb38ff69Pj88/f78vj+7Pj/6fP96/b8ws3bGjZUEjRavtjranukYWd1YGNxVVZiXl1paWZydqHAPoO+QXy5FC5WITJgiLLtVF9zU1dYTEtPeXJtqJmJu6+bu6SZnYiGNW2rFCM7wdnmja/qVlZbaGFYlod5xbSgrJyItqmU2sm4t6ifL2CbFyVDncHmUlxlCwkJAQMCVUxEsqSQqpuHv7GW0MGtlYl+KEp5IShHeHqOV1VZBAYDAgICIyMkcGlj7+XJEw8NGhINxLqsLTpnbniKQ0ltcW9qYFxYVlZYamNYAwIBsqSKAgEFIR0cMjpkZnSYUVBYu7qlPFFzXFhQWlRNgHltu6qU4dC0vq6TjoR4LDVlNz5bsZ6UTk9bx7ag1M22+vjxvbqr7+G68+vPurq+KjBRZXifOj9jU01XeW1xaV9qbF9YiomVSDRHcwZzLB86DBIZIiM/RVieLTNKQj5SYFJcQz5FZl1gYRhbmWmT3sHfdAN4Gh07jK/SJCo/Rk1pR0paOCw5JhwmQD1FwxjKpiyd3l/S9ybjLilRTjITsnEje1Mj"
+    },
+    {
+      "name": "Lightning",
+      "rgb": "boKw4u348vj08Pj78vj89Pn69fn98/n59vf68vf88Pj70tjhYoq5eqXUut72w9z2nJKbqIV8tI15rI92yuP2pcf0mb70lbnhrcHel7XXxtzx3ez34fL/dXqVvKmpx8XN7fb82On5r9DzpsfthqTM2eHr9fn8z+b04PT72uz8zOT81Oj/0eb65/f+1un9wtz4n7vU3+/2wtzzmbDA4PP83PT/1vD9z+X8ttLxkrDXm77jzej8nbjK1+3+xdz3YWuqeZHCboCqdIqrc4u8UWqUrMPWr83tx+L2kqzLtsjiMkR4aYHAYYG9TWK8L1/OLWviLWXXFz6Zu9jvytvxr8LhgavkOVWMbp+/MU+kTnTeJ2nbJn/wJn/zG1HHuNDh8vf6NE+JLV6ihsj4OWCcMEqYU3rMNm3WNJnvOZz5F2HEqsvgfqPMHiVAFStVM1mNI12sHkmYJT+DcAWEOWSyTYG3EFfQcqvkEEWCOUdlOVWAM1WIltP4QRSG+/f6//76ZwF2LHzMgbHdrd3+QWGOICZDDSNTCzJqCylmwR7D/f76/f77+B/lFhwzARpLHjhqmL/j"
     }
   ]
 }
