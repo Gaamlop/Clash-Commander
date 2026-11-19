@@ -340,8 +340,8 @@ class MainActivity : ComponentActivity() {
 
         val names = unsupported.joinToString(", ") { it.name }
         deckModelWarning.value =
-            "On-device hand detection doesn't support: $names. " +
-                "Those cards may be misrecognized until the classifier is retrained."
+            "Aviso: la deteccion visual aun no reconoce $names. " +
+                "Autopilot podria confundir esa carta hasta actualizar el modelo."
         Log.w(TAG, "DECK: Unsupported by on-device classifier (${unsupported.size}): $names")
     }
 
