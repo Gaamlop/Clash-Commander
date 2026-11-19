@@ -274,8 +274,8 @@ object HandDetector {
                     // Smoothing helps the display but must not authorize actions:
                     // only cards recognized in THIS frame count toward reliability.
                     val freshSlots = FreshHandAuthorization.verifiedSlots(newScan, hand)
-                    captureAuthorization.authorizeFrame(System.currentTimeMillis())
                     reliableFreshSlots = freshSlots
+                    captureAuthorization.authorizeFrame(System.currentTimeMillis())
 
                     // Atomic swap of hand state
                     currentHand = hand
