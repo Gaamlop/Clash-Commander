@@ -66,6 +66,7 @@ object HandDetector {
     private val captureAuthorization = CaptureAuthorization()
     /** Immutable slot map for directly observed cards, excluding temporal smoothing. */
     @Volatile private var freshHand: Map<Int, String> = emptyMap()
+    private val freshCoverage = FreshHandCoverage()
 
     /**
      * Autopilot must not trust stale cards, a menu screenshot, or a
@@ -144,6 +145,7 @@ object HandDetector {
         }
 
         consecutiveNullFrames = 0
+        freshCoverage.reset()
         currentHand = emptyMap()
         captureAuthorization.revoke()
         freshHand = emptyMap()
@@ -274,16 +276,26 @@ object HandDetector {
                     // Display may contain smoothed cards. Placement lookup MUST contain
                     // only distinct cards observed in the current frame and same slot.
                     val verified = FreshHandAuthorization.verifiedCards(newScan, hand)
+                    val coverage = freshCoverage.record(verified.size)
+                    if (coverage.frames % 30 == 0) {
+                        Log.i(TAG, "CARD-VISION-METRICS: frames=${coverage.frames} " +
+                            "freshSlots=${coverage.recognizedSlots}/${coverage.frames * 4} " +
+                            "coverage=${coverage.coveragePercent}% " +
+                            "fullHand=${coverage.fullFrames}/${coverage.frames} " +
+                            "fullHandRate=${coverage.fullHandPercent}% " +
+                            "emptyFrames=${coverage.emptyFrames}; accuracy=not_measured")
+                    }
                     currentHand = hand
                     freshHand = verified
                     // Publish authorization LAST, after both maps are consistent.
                     captureAuthorization.authorizeFrame(System.currentTimeMillis())
-                    val handCount = hand.filterKeys { it in 0..3 }.size
-                    diagnosticStatus = if (handCount >= 3) {
-                        "Vision: ${handCount}/4 cartas (${safeCopy.width}x${safeCopy.height})"
+                    val freshCount = verified.size
+                    diagnosticStatus = if (freshCount >= 3) {
+                        "Vision actual: ${freshCount}/4 | cobertura ${coverage.coveragePercent}% " +
+                            "(${coverage.frames} cuadros)"
                     } else {
-                        "Vision: ${handCount}/4. Pulsa Img para revisar captura " +
-                            "(${safeCopy.width}x${safeCopy.height})"
+                        "Vision actual: ${freshCount}/4 | cobertura ${coverage.coveragePercent}% " +
+                            "(${coverage.frames} cuadros). Pulsa Img"
                     }
 
                     if (hand != lastHand) {
