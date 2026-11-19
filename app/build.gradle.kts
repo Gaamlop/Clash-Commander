@@ -68,6 +68,9 @@ dependencies {
     // Gson for JSON parsing
     implementation("com.google.code.gson:gson:2.11.0")
 
+    // JVM tests for deterministic deck policy and safe decision logic.
+    testImplementation("junit:junit:4.13.2")
+
     // Coil for image loading (card art from RoyaleAPI CDN)
     implementation("io.coil-kt:coil-compose:2.7.0")
 
