@@ -1,13 +1,22 @@
 package com.yoyostudios.clashcompanion.detection
 
 /**
- * Only directly observed hand cards can authorize a decision.
- * A card carried over by temporal smoothing is useful for display,
- * but cannot be used as evidence for a fresh play.
+ * Cards seen in the current frame and occupying the same slot in the displayed
+ * hand. Smoothed or stale display values must never authorize a tap.
  */
 internal object FreshHandAuthorization {
+    fun verifiedCards(
+        observed: Map<Int, String>,
+        displayed: Map<Int, String>
+    ): Map<Int, String> {
+        val seen = mutableSetOf<String>()
+        return (0..3).mapNotNull { slot ->
+            observed[slot]?.takeIf { card ->
+                card.isNotBlank() && displayed[slot] == card && seen.add(card)
+            }?.let { slot to it }
+        }.toMap()
+    }
+
     fun verifiedSlots(observed: Map<Int, String>, displayed: Map<Int, String>): Int =
-        (0..3).mapNotNull { slot ->
-            observed[slot]?.takeIf { it.isNotBlank() && displayed[slot] == it }
-        }.distinct().size
+        verifiedCards(observed, displayed).size
 }
