@@ -158,6 +158,9 @@ object HandDetector {
             while (isActive) {
                 val frame = ScreenCaptureService.getLatestFrame()
                 if (frame == null || frame.isRecycled) {
+                    // Fail closed immediately: a lost capture must never authorize a
+                    // tap using cards from the previous screenshot.
+                    lastMatchFrameMs = 0L
                     consecutiveNullFrames++
                     if (consecutiveNullFrames >= 3) {
                         diagnosticStatus = "Captura sin imagen; revisa el permiso de pantalla"
@@ -174,11 +177,16 @@ object HandDetector {
                 val safeCopy = try {
                     frame.copy(Bitmap.Config.ARGB_8888, false)
                 } catch (e: Exception) {
+                    lastMatchFrameMs = 0L
                     Log.w(TAG, "CARD-ML: Frame copy failed: ${e.message}")
                     delay(SCAN_INTERVAL_MS)
                     continue
                 }
-                if (safeCopy == null) { delay(SCAN_INTERVAL_MS); continue }
+                if (safeCopy == null) {
+                    lastMatchFrameMs = 0L
+                    delay(SCAN_INTERVAL_MS)
+                    continue
+                }
 
                 try {
                     // Match detection with exit tracking
@@ -197,6 +205,10 @@ object HandDetector {
                     } else {
                         // Already in match — check if we've left
                         if (!isInMatch(safeCopy)) {
+                            // Keep the exit debounce for UI state, but invalidate
+                            // authorization on the FIRST bad frame. The 10-frame
+                            // grace period must never permit a stale autopilot play.
+                            lastMatchFrameMs = 0L
                             consecutiveNonMatch++
                             diagnosticStatus = "La captura no muestra cartas de la partida"
                             if (consecutiveNonMatch >= MATCH_EXIT_FRAMES) {
@@ -277,6 +289,7 @@ object HandDetector {
                         }
                     }
                 } catch (e: Exception) {
+                    lastMatchFrameMs = 0L
                     Log.w(TAG, "CARD-ML: Scan error: ${e.message}")
                 } finally {
                     safeCopy.recycle()
