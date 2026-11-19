@@ -85,13 +85,19 @@ export default {
           "x-goog-api-key": env.GEMINI_API_KEY,
         },
         body: input,
-        redirect: "error",
+        // Cloudflare Workers supports only "follow" and "manual".
+        // Manual also prevents forwarding the Google API key to a redirect host.
+        redirect: "manual",
       });
+      if (upstream.status >= 300 && upstream.status < 400) {
+        return json({ error: "Unexpected Gemini redirect" }, 502);
+      }
       return new Response(upstream.body, {
         status: upstream.status,
         headers: responseHeaders,
       });
-    } catch {
+    } catch (error) {
+      console.error("Gemini upstream fetch failed:", error instanceof Error ? error.message : "unknown");
       return json({ error: "Gemini upstream unavailable" }, 502);
     }
   },
