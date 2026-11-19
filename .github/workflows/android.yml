@@ -7,6 +7,10 @@ on:
     branches:
       - main
       - master
+  pull_request:
+    branches:
+      - main
+      - master
 
 permissions:
   contents: read
@@ -39,6 +43,9 @@ jobs:
       - name: Configure SDK only (no API secrets inside APK)
         run: |
           printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+
+      - name: Validate deck policies
+        run: ./gradlew testDebugUnitTest
 
       - name: Build APK
         run: ./gradlew assembleDebug
