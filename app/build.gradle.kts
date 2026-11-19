@@ -12,8 +12,8 @@ android {
         applicationId = "com.yoyostudios.clashcompanion"
         minSdk = 28
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 4
+        versionName = "1.3"
 
         // No third-party API key may be embedded in an APK.
         buildConfigField("String", "ANTHROPIC_API_KEY", "\"\"")
