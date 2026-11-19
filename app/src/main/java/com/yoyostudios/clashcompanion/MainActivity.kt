@@ -274,6 +274,16 @@ class MainActivity : ComponentActivity() {
         battleMode.value = mode
     }
 
+    fun prepareProfile(profile: com.yoyostudios.clashcompanion.strategy.DeckProfiles.Profile) {
+        val cards = DeckManager.cardsForNames(profile.cardNames)
+        if (cards == null) {
+            deckImportError.value = "El catalogo no contiene las ocho cartas del perfil"
+            return
+        }
+        installDeck(cards)
+        Toast.makeText(this, "Equipa el mismo mazo y sus formas en Clash Royale", Toast.LENGTH_LONG).show()
+    }
+
     fun preparePreset(preset: DeckPreset) {
         val cards = DeckManager.parseDeckParam(preset.cardIds.joinToString(";")) ?: run {
             deckImportError.value = DeckManager.lastImportError

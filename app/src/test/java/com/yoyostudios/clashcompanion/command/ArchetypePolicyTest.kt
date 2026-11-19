@@ -5,7 +5,7 @@ import org.junit.Test
 
 class ArchetypePolicyTest {
     private val iceBow = setOf("X-Bow", "Tesla", "Ice Wizard", "Rocket", "Knight", "Skeletons", "Tornado", "The Log")
-    private val miner = setOf("Miner", "Poison", "Knight", "Bomb Tower", "Skeletons", "Bats", "The Log", "Ice Spirit")
+    private val miner = com.yoyostudios.clashcompanion.strategy.DeckProfiles.minerControl.cardNames
     private val clear = ArchetypePolicy.Board(false)
     @Test fun hypnoRequiresExactEightCards() {
         assertEquals(ArchetypePolicy.Profile.HYPNO_LOGBAIT, ArchetypePolicy.profile(ArchetypePolicy.hypnoCards))

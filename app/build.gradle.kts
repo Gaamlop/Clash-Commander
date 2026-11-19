@@ -73,11 +73,14 @@ dependencies {
     // Gson for JSON parsing
     implementation("com.google.code.gson:gson:2.11.0")
 
+    // JVM tests for deterministic deck policy and safe decision logic.
+    testImplementation("junit:junit:4.13.2")
+
     // Coil for image loading (card art from RoyaleAPI CDN)
     implementation("io.coil-kt:coil-compose:2.7.0")
 
     // PyTorch Mobile Lite for the bundled on-device card classifier.
     implementation("org.pytorch:pytorch_android_lite:2.1.0")
 
-    testImplementation("junit:junit:4.13.2")
+
 }

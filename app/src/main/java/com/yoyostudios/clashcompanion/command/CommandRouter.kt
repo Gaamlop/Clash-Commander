@@ -593,6 +593,10 @@ Or when waiting is safer: {"action":"wait","observed_elixir":null,"reasoning":"<
      * Voice commands still work during autopilot (Fast Path overrides).
      */
     fun startAutopilot() {
+        if (com.yoyostudios.clashcompanion.strategy.DeckProfiles.matchNames(deckCards) == null) {
+            overlay?.updateStatus("AUTO: Importa Ice Bow, Miner Control o el Logbait de Hypno exacto")
+            return
+        }
         if (!AiConnection.isConfigured()) {
             overlay?.updateStatus("Autopilot: configura Gemini en Clash Commander")
             return

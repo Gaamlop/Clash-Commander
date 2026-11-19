@@ -72,6 +72,9 @@ object DeckManager {
         battleMode = BattleMode.entries.firstOrNull { it.name == saved } ?: BattleMode.CLASSIC
     }
 
+    fun cardsForNames(names: Set<String>): List<CardInfo>? =
+        cardDatabase?.values?.filter { it.name in names }?.takeIf { it.size == 8 && names.size == 8 }
+
     fun tacticalContext(): String {
         val preset = DeckPresets.matching(currentDeck.map { it.id })
         return "MODE: ${battleMode.tacticalContext}\n" +

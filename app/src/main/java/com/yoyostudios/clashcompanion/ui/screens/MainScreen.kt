@@ -237,7 +237,16 @@ fun MainScreen(activity: MainActivity) {
                         selected = battleMode.name,
                         onSelect = { name -> activity.selectBattleMode(BattleMode.valueOf(name)) }
                     )
-                    Text("Mazos para practicar", style = CrTypography.titleMedium, color = CrColors.TextGold)
+                    Text("Mazos de Autopilot", style = CrTypography.titleMedium, color = CrColors.TextGold)
+                    com.yoyostudios.clashcompanion.strategy.DeckProfiles.all.forEach { profile ->
+                        Text(
+                            "Preparar: ${profile.displayName}",
+                            style = CrTypography.bodyMedium, color = CrColors.TextGold,
+                            modifier = Modifier.fillMaxWidth().clickable { activity.prepareProfile(profile) }
+                                .padding(vertical = 8.dp)
+                        )
+                    }
+                    Text("Otros mazos para Smart y voz", style = CrTypography.titleMedium, color = CrColors.TextGold)
                     Text(
                         "Variantes consultadas el ${DeckPresets.CHECKED_ON}. Datos de jugadores de ranked; " +
                             "su rendimiento con esta IA aún no está medido en desafíos ni ranked.",
@@ -513,6 +522,13 @@ private fun DeckCard(
 
             Spacer(modifier = Modifier.height(6.dp))
 
+            val selectedProfile = com.yoyostudios.clashcompanion.strategy.DeckProfiles.matchNames(cards.map { it.name })
+            Text(
+                text = selectedProfile?.let { "PERFIL: ${it.displayName}" }
+                    ?: "Autopilot: importa uno de los tres mazos seleccionados",
+                style = CrTypography.labelSmall, color = CrColors.TextGold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
             // Card grid: two rows of 4, tight spacing
             val topRow = cards.take(4)
             val bottomRow = cards.drop(4)

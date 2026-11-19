@@ -52,3 +52,10 @@ m3_test_log.txt
 # OS
 .DS_Store
 Thumbs.db
+
+# Python replay evaluator caches
+__pycache__/
+*.py[cod]
+
+# Kotlin local compiler state
+.kotlin/

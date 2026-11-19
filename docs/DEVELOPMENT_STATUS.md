@@ -3,7 +3,7 @@
 ## Alcance de esta revisión
 
 Base inicial: 0f197fc (1.3). Se incorporaron también los cambios posteriores de
-main hasta 7ce9024 (1.4): tres huellas adicionales, umbral de comparación 0,18
+main hasta 2407188 (1.4 y evaluación offline de repeticiones): tres huellas adicionales, umbral de comparación 0,18
 y mínimo de dos cartas verificadas. Versión de integración: 1.4.1-experimental,
 versionCode 6. Ningún resultado de compilación se considera prueba de juego real.
 
@@ -18,9 +18,9 @@ versionCode 6. Ningún resultado de compilación se considera prueba de juego re
   validados; estrategia guardada solamente para el mazo correspondiente.
 - Estado: arena y HUD del mismo fotograma; elixir y amenazas comunicados como
   observaciones visuales inciertas. Valores ausentes permanecen desconocidos.
-- Ice Bow: detección de familia por X-Bow/Tesla/Ice Wizard/Rocket, reserva de
+- Ice Bow: coincidencia exacta con el perfil de ocho cartas de DeckProfiles, reserva de
   nueve de elixir para X-Bow ofensivo/Rocket y prioridad defensiva.
-- Miner Control: detección por Miner/Poison, reserva defensiva para Miner y
+- Miner Control: coincidencia exacta con Miner Poison Wall Breakers, reserva defensiva para Miner y
   rechazo de Poison a torre sin defensores observados.
 - Logbait de Hypno: coincidencia exacta con Barril de Duendes, Valquiria,
   Ejército de Esqueletos, Rompemuros, Princesa, Cañón, Duende Lanzadardos y
@@ -61,3 +61,7 @@ La suite cubre geometría, antigüedad, cambios de mano, cancelación HTTP, cont
 JSON, caché por mazo, alias españoles, catálogo de presets y restricciones tácticas.
 Los informes quedan en app/build/reports; el APK en app/build/outputs/apk/debug.
 La instalación y las pruebas de partida en el teléfono siguen pendientes.
+
+La integración conserva DeckProfiles como única definición de los tres mazos,
+los helpers de autorización de main y su evaluador offline de repeticiones.
+Las pruebas del evaluador no constituyen una evaluación sobre un vídeo real.

@@ -23,6 +23,10 @@ object OpusCoach {
             it.deck == PlaybookPolicy.deckKey(DeckManager.currentDeck.map { card -> card.id })
         }?.json
 
+    fun playbookFor(deck: List<DeckManager.CardInfo>): String? =
+        if (deck.size == 8 && PlaybookPolicy.deckKey(deck.map { it.id }) ==
+            PlaybookPolicy.deckKey(DeckManager.currentDeck.map { it.id })) cachedPlaybook else null
+
     /** Every deck assignment invalidates requests, including A -> B -> A transitions. */
     fun onDeckChanged(cards: List<DeckManager.CardInfo>) = synchronized(stateLock) {
         requestEpoch.incrementAndGet()

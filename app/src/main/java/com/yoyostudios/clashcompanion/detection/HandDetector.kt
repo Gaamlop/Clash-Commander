@@ -171,6 +171,7 @@ object HandDetector {
                         consecutiveNonMatch = 0
                         Coordinates.updateFromCapture(frame.width, frame.height)
                         val startedAt = SystemClock.elapsedRealtime()
+                        recognition = recognition.copy(detectedHand = emptyMap())
                         val newScan = CardClassifier.classifyHand(frame, deckCards)
                         val merged = HandStateReducer.merge(lastHand, newScan, misses)
                         currentCoroutineContext().ensureActive()

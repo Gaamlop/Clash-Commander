@@ -5,22 +5,16 @@ object ArchetypePolicy {
     enum class Profile { ICE_BOW, MINER_CONTROL, HYPNO_LOGBAIT, GENERAL }
     data class Board(val immediateThreat: Boolean? = null, val threatLane: String? = null,
                      val enemyTowerOccupied: Boolean? = null)
-    val hypnoCards = setOf("Goblin Barrel", "Valkyrie", "Skeleton Army", "Wall Breakers",
-        "Princess", "Cannon", "Dart Goblin", "Ice Spirit")
+    val hypnoCards: Set<String> get() = com.yoyostudios.clashcompanion.strategy.DeckProfiles.hypnoLogBait.cardNames
 
-    fun profile(deck: Set<String>): Profile = when {
-        deck == hypnoCards -> Profile.HYPNO_LOGBAIT
-        deck.containsAll(setOf("X-Bow", "Tesla", "Ice Wizard", "Rocket")) -> Profile.ICE_BOW
-        deck.containsAll(setOf("Miner", "Poison")) -> Profile.MINER_CONTROL
+    fun profile(deck: Set<String>): Profile = when (com.yoyostudios.clashcompanion.strategy.DeckProfiles.matchNames(deck)?.id) {
+        "ice_bow" -> Profile.ICE_BOW
+        "miner_control" -> Profile.MINER_CONTROL
+        "hypno_wb_bait" -> Profile.HYPNO_LOGBAIT
         else -> Profile.GENERAL
     }
 
-    fun guidance(deck: Set<String>): String = when (profile(deck)) {
-        Profile.ICE_BOW -> "ICE BOW: defend with Tesla/Ice Wizard, protect X-Bow. Offensive X-Bow needs at least 9 elixir and no immediate threat. Do not blindly Rocket-cycle."
-        Profile.MINER_CONTROL -> "MINER CONTROL: defend efficiently, preserve 3 elixir after offensive Miner. Poison needs visible targets; do not assume a Miner/Poison combination is affordable."
-        Profile.HYPNO_LOGBAIT -> "HYPNO LOGBAIT (exact imported eight cards): Cannon pulls threats; Valkyrie handles ground swarms; preserve Dart Goblin/Princess for air defense. Barrel and Wall Breakers pressure after defending. No Rocket or The Log exists in this deck. Do not invent the opponent's spell cycle."
-        Profile.GENERAL -> "Use the imported deck; no specialized policy has been identified."
-    }
+    fun guidance(deck: Set<String>): String = com.yoyostudios.clashcompanion.strategy.DeckProfiles.promptFor(deck)
 
     /** null means allowed by these constraints, not certified to be a good move. */
     fun rejection(deck: Set<String>, card: String, zone: String, elixir: Int?, board: Board): String? {
