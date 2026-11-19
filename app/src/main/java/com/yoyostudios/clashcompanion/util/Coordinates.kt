@@ -23,6 +23,18 @@ object Coordinates {
         screenH = dm.heightPixels.toFloat()
     }
 
+    /**
+     * Android's app displayMetrics may exclude system bars while the actual
+     * captured match includes the entire physical screen. Calibrate card taps
+     * to the same frame pixels used by the classifier after a match is found.
+     */
+    fun updateFromCapture(frameWidth: Int, frameHeight: Int) {
+        if (frameWidth > 0 && frameHeight > frameWidth) {
+            screenW = frameWidth.toFloat()
+            screenH = frameHeight.toFloat()
+        }
+    }
+
     private fun x(refX: Float): Float = refX / REF_W * screenW
     private fun y(refY: Float): Float = refY / REF_H * screenH
     private fun pos(refX: Float, refY: Float): Pair<Float, Float> = Pair(x(refX), y(refY))
