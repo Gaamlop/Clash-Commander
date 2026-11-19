@@ -27,8 +27,8 @@ class ElixirBarMathTest {
         assertEquals(5, ElixirBarMath.estimate(BooleanArray(40) { it < 21 && it != 9 }))
     }
 
-    @Test fun almostFullBarNeedsOnlyTwoMissingSamples() {
-        assertEquals(10, ElixirBarMath.estimate(BooleanArray(40) { it < 38 }))
+    @Test fun almostFullBarDoesNotInventTen() {
+        assertEquals(9, ElixirBarMath.estimate(BooleanArray(40) { it < 38 }))
     }
 
     @Test fun invalidGeometryIsUnknown() {
