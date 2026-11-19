@@ -29,7 +29,10 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Test offline hand-slot benchmark\n        run: python3 -m unittest discover -s scripts -p 'test_hand_slot_benchmark.py'\n\n      - name: Set up Android SDK
+      - name: Test offline hand-slot benchmark
+        run: python3 -m unittest discover -s scripts -p 'test_hand_slot_benchmark.py'
+
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
@@ -42,7 +45,8 @@ jobs:
 
       - name: Configure SDK only (no API secrets inside APK)
         run: |
-          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          printf 'sdk.dir=%s
+' "$ANDROID_HOME" > local.properties
 
       - name: Validate deck policies
         run: ./gradlew testDebugUnitTest
