@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import com.yoyostudios.clashcompanion.MainActivity
 import com.yoyostudios.clashcompanion.R
 import com.yoyostudios.clashcompanion.deck.DeckManager
+import com.yoyostudios.clashcompanion.strategy.DeckProfiles
 import com.yoyostudios.clashcompanion.ui.components.CrButtonGold
 import com.yoyostudios.clashcompanion.ui.components.CrCard
 import com.yoyostudios.clashcompanion.ui.components.CrCrown
@@ -409,6 +410,15 @@ private fun DeckCard(
             }
 
             Spacer(modifier = Modifier.height(6.dp))
+            val profile = DeckProfiles.matchNames(cards.map { it.name })
+            Text(
+                text = if (profile != null) "PERFIL: ${profile.displayName}"
+                    else "AUTOPILOT: Disponible solo para los 3 mazos seleccionados",
+                style = CrTypography.labelSmall,
+                color = if (profile != null) CrColors.TextGold else CrColors.Error,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Card grid: two rows of 4, tight spacing
             val topRow = cards.take(4)
