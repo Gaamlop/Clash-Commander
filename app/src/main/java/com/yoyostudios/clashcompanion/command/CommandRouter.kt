@@ -435,7 +435,9 @@ object CommandRouter {
                 throw error
             } catch (error: Exception) {
                 if (context.revision == decisionRevision) {
-                    overlay?.updateStatus("$label: No se pudo obtener una decision segura")
+                    val cause = if (error is com.yoyostudios.clashcompanion.api.GeminiHttpException)
+                        "Gemini HTTP ${error.statusCode}" else "respuesta no valida (${error.javaClass.simpleName})"
+                    overlay?.updateStatus("$label: $cause; reintentando")
                     Log.w(TAG, "$label: Decision failed (${error.javaClass.simpleName})")
                 }
             } finally {

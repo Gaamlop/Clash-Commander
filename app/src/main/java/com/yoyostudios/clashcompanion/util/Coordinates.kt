@@ -102,25 +102,22 @@ object Coordinates {
 
     val CARD_SLOTS get() = CaptureGeometry.cardSlotCenters(screenW.toInt(), screenH.toInt())
 
-    // ── Arena Zones (where to place cards) ──
-    val LEFT_BRIDGE    get() = pos(240f, 950f)
-    val RIGHT_BRIDGE   get() = pos(840f, 950f)
-    val CENTER         get() = pos(540f, 1050f)
-    val BEHIND_LEFT    get() = pos(270f, 1300f)
-    val BEHIND_RIGHT   get() = pos(810f, 1300f)
-    val FRONT_LEFT     get() = pos(270f, 800f)
-    val FRONT_RIGHT    get() = pos(810f, 800f)
-    val BACK_CENTER    get() = pos(540f, 1400f)
-
-    // Opponent tower positions (for aggressive placement near their towers)
-    val OPP_LEFT_TOWER  get() = pos(270f, 650f)
-    val OPP_RIGHT_TOWER get() = pos(810f, 650f)
-    val OPP_KING        get() = pos(540f, 550f)
-
-    // Player tower positions (for defensive placement near your towers)
-    val MY_LEFT_TOWER   get() = pos(270f, 1400f)
-    val MY_RIGHT_TOWER  get() = pos(810f, 1400f)
-    val MY_KING         get() = pos(540f, 1500f)
+    // Arena anchors are calibrated separately from the card-art crops.
+    private fun placement(zone: String) = ArenaPlacementCalibration.position(zone, screenW.toInt(), screenH.toInt())
+    val LEFT_BRIDGE get() = placement("left_bridge")
+    val RIGHT_BRIDGE get() = placement("right_bridge")
+    val CENTER get() = placement("center")
+    val BEHIND_LEFT get() = placement("behind_left")
+    val BEHIND_RIGHT get() = placement("behind_right")
+    val FRONT_LEFT get() = placement("front_left")
+    val FRONT_RIGHT get() = placement("front_right")
+    val BACK_CENTER get() = placement("back_center")
+    val OPP_LEFT_TOWER get() = placement("opponent_left")
+    val OPP_RIGHT_TOWER get() = placement("opponent_right")
+    val OPP_KING get() = placement("opponent_king")
+    val MY_LEFT_TOWER get() = placement("my_left")
+    val MY_RIGHT_TOWER get() = placement("my_right")
+    val MY_KING get() = placement("my_king")
 
     // Map of zone name aliases to coordinates
     val ZONE_MAP: Map<String, Pair<Float, Float>> get() = mapOf(

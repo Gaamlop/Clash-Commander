@@ -153,7 +153,7 @@ object HandDetector {
                             )
                         }
                         if (matchDetected) consecutiveNonMatch++
-                        diagnosticStatus = "No veo la arena. Comparte PANTALLA COMPLETA"
+                        diagnosticStatus = "Sin mano jugable: esperando partida o salida de resultados"
                         if (consecutiveNonMatch >= MATCH_EXIT_FRAMES) {
                             clearObservation()
                             matchDetected = false

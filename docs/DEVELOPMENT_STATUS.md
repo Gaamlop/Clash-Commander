@@ -93,3 +93,20 @@ ni integrado un modelo de ese repositorio. La inferencia rápida de una polític
 entrenada requiere un objetivo independiente: contrato de observaciones, modelo
 disponible y evaluación reproducible. La corrección actual reduce contexto
 remoto y verifica reintentos; no convierte Gemini en una política entrenada.
+
+## Evidencia de capturas y calibración 1.4.3
+
+El usuario aportó capturas con mano Princess/Ice Spirit/Goblin Barrel, siguiente
+Dart Goblin y10elixir. Valkyrie aparece como desconocida; no se fuerza su identidad.
+En esa fase el mensaje es SMART con fallo de decisión, no prueba de Auto activo.
+La captura de tres coronas ya no contiene mano: el aviso de compartir pantalla
+completa era engañoso en resultados y se sustituyó por espera de partida.
+Las zonas heredadas front_left/front_right quedaban sobre la mitad enemiga; center
+cerca del río. Se anotaron aproximadamente río, torres y límites del área propia
+sobre las imágenes576×1280. Las posiciones ahora escalan esas anclas, sin modificar
+los recortes de cartas. Las pruebas comprueban que las zonas de tropas quedan
+bajo el río y los objetivos de torre dentro de cajas anotadas. Esto es calibración
+geométrica por imagen, aún no confirmación de despliegue exitoso en el teléfono.
+Los fallos HTTP muestran únicamente el código, sin cuerpos ni credenciales.
+
+Se localizó además el vídeo de Surgical Goblin “AI IS TAKING OVER CLASH ROYALE… IT ALREADY HIT #1” (https://www.youtube.com/watch?v=X_leWfBQ8-w). La transcripción indexada describe reacciones rápidas pero no publica el sistema; no prueba que el repositorio ClashAI corresponda a esa cuenta.
