@@ -64,15 +64,14 @@ object HandDetector {
     var diagnosticStatus: String = "Esperando primera captura"
         private set
 
-    @Volatile
-    private var lastMatchFrameMs: Long = 0
+    private val captureAuthorization = CaptureAuthorization()
 
     /**
      * Autopilot must not trust stale cards, a menu screenshot, or a
      * one-card guess. This is a safety gate, not proof that the model is right.
      */
     fun hasReliableHand(minCards: Int = 3): Boolean =
-        System.currentTimeMillis() - lastMatchFrameMs < 2_000L &&
+        captureAuthorization.isFresh(System.currentTimeMillis()) &&
             currentHand.filterKeys { it in 0..3 }.values.distinct().size >= minCards
 
     // ── Match Detection ─────────────────────────────────────────────────
@@ -145,7 +144,7 @@ object HandDetector {
 
         consecutiveNullFrames = 0
         currentHand = emptyMap()
-        lastMatchFrameMs = 0L
+        captureAuthorization.revoke()
         diagnosticStatus = "Iniciando detector de cartas"
         var matchDetected = false
         var consecutiveNonMatch = 0
@@ -158,6 +157,9 @@ object HandDetector {
             while (isActive) {
                 val frame = ScreenCaptureService.getLatestFrame()
                 if (frame == null || frame.isRecycled) {
+                    // Fail closed immediately: a lost capture must never authorize a
+                    // tap using cards from the previous screenshot.
+                    captureAuthorization.revoke()
                     consecutiveNullFrames++
                     if (consecutiveNullFrames >= 3) {
                         diagnosticStatus = "Captura sin imagen; revisa el permiso de pantalla"
@@ -174,11 +176,16 @@ object HandDetector {
                 val safeCopy = try {
                     frame.copy(Bitmap.Config.ARGB_8888, false)
                 } catch (e: Exception) {
+                    captureAuthorization.revoke()
                     Log.w(TAG, "CARD-ML: Frame copy failed: ${e.message}")
                     delay(SCAN_INTERVAL_MS)
                     continue
                 }
-                if (safeCopy == null) { delay(SCAN_INTERVAL_MS); continue }
+                if (safeCopy == null) {
+                    captureAuthorization.revoke()
+                    delay(SCAN_INTERVAL_MS)
+                    continue
+                }
 
                 try {
                     // Match detection with exit tracking
@@ -197,6 +204,10 @@ object HandDetector {
                     } else {
                         // Already in match — check if we've left
                         if (!isInMatch(safeCopy)) {
+                            // Keep the exit debounce for UI state, but invalidate
+                            // authorization on the FIRST bad frame. The 10-frame
+                            // grace period must never permit a stale autopilot play.
+                            captureAuthorization.revoke()
                             consecutiveNonMatch++
                             diagnosticStatus = "La captura no muestra cartas de la partida"
                             if (consecutiveNonMatch >= MATCH_EXIT_FRAMES) {
@@ -215,7 +226,7 @@ object HandDetector {
                         }
                     }
 
-                    lastMatchFrameMs = System.currentTimeMillis()
+                    captureAuthorization.authorizeFrame(System.currentTimeMillis())
                     Coordinates.updateFromCapture(safeCopy.width, safeCopy.height)
 
                     // Classify all 5 card slots using both calibrated templates
@@ -277,6 +288,7 @@ object HandDetector {
                         }
                     }
                 } catch (e: Exception) {
+                    captureAuthorization.revoke()
                     Log.w(TAG, "CARD-ML: Scan error: ${e.message}")
                 } finally {
                     safeCopy.recycle()
@@ -292,7 +304,7 @@ object HandDetector {
         scanJob?.cancel()
         scanJob = null
         currentHand = emptyMap()
-        lastMatchFrameMs = 0L
+        captureAuthorization.revoke()
         diagnosticStatus = "Escaner detenido"
         Log.i(TAG, "CARD-ML: Scanning stopped")
     }
