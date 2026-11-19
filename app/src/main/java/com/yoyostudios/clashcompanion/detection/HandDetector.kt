@@ -216,6 +216,7 @@ object HandDetector {
                     }
 
                     lastMatchFrameMs = System.currentTimeMillis()
+                    Coordinates.updateFromCapture(safeCopy.width, safeCopy.height)
 
                     // Classify all 5 card slots using both calibrated templates
                     // and the legacy 103-class on-device model.
