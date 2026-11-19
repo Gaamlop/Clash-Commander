@@ -15,6 +15,7 @@ import com.yoyostudios.clashcompanion.detection.ArenaDetector
 import com.yoyostudios.clashcompanion.detection.HandDetector
 import com.yoyostudios.clashcompanion.overlay.OverlayManager
 import com.yoyostudios.clashcompanion.strategy.OpusCoach
+import com.yoyostudios.clashcompanion.strategy.DeckProfiles
 import com.yoyostudios.clashcompanion.util.Coordinates
 import kotlinx.coroutines.*
 
@@ -427,6 +428,7 @@ object CommandRouter {
      */
     private fun buildSmartPrompt(): String {
         val deckJson = DeckManager.getDeckJson()
+        val archetypePlan = DeckProfiles.promptFor(deckCards)
 
         val playbook = OpusCoach.cachedPlaybook
         val playbookSection = if (!playbook.isNullOrBlank()) {
@@ -455,6 +457,7 @@ object CommandRouter {
         return """You are a real-time Clash Royale tactical AI. Speed is critical — be decisive.
 
 DECK: $deckJson
+$archetypePlan
 $playbookSection
 $handSection
 $arenaSection$lastPlayedSection
@@ -578,6 +581,15 @@ Or ONLY if user says wait: {"action":"wait","reasoning":"<15 words max>"}"""
      * Voice commands still work during autopilot (Fast Path overrides).
      */
     fun startAutopilot() {
+        // Prioritize three evidence-backed archetypes instead of pretending to
+        // be a competitive agent for arbitrary decks.
+        val profile = DeckProfiles.matchNames(deckCards)
+        if (profile == null) {
+            overlay?.updateStatus(
+                "AUTO: Solo Ice Bow, Miner Control o Log Bait de Hypno"
+            )
+            return
+        }
         if (!AiConnection.isConfigured()) {
             overlay?.updateStatus("Autopilot: configura Gemini en Clash Commander")
             Log.w(TAG, "CMD: Autopilot skipped — no GEMINI_API_KEY")
@@ -588,7 +600,7 @@ Or ONLY if user says wait: {"action":"wait","reasoning":"<15 words max>"}"""
             return
         }
         isAutopilot = true
-        overlay?.updateStatus("AUTOPILOT: AI is playing!")
+        overlay?.updateStatus("AUTOPILOT: ${profile.displayName} activo")
         overlay?.setAutopilotActive(true)
         Log.i(TAG, "CMD: Autopilot STARTED")
 
