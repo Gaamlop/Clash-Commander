@@ -19,6 +19,15 @@ object OpusCoach {
 
     private const val TAG = "ClashCompanion"
     private const val PLAYBOOK_FILE = "playbook.json"
+    private const val PLAYBOOK_DECK_FILE = "playbook_deck_ids.txt"
+    private var cachedDeckSignature: String? = null
+
+    private fun signature(deck: List<DeckManager.CardInfo>): String =
+        deck.map { it.id }.sorted().joinToString(";")
+
+    /** A playbook is valid ONLY for the exact eight cards that generated it. */
+    fun playbookFor(deck: List<DeckManager.CardInfo>): String? =
+        if (deck.size == 8 && cachedDeckSignature == signature(deck)) cachedPlaybook else null
 
     /** Cached playbook JSON from the last analysis */
     var cachedPlaybook: String? = null
@@ -66,6 +75,12 @@ Respond ONLY with valid JSON. No other text.
     ): String? {
         val deckJson = DeckManager.getDeckJson()
         val deckNames = deck.joinToString(", ") { it.name }
+        val requestedSignature = signature(deck)
+        // Never expose a previous deck's playbook while a new one is analyzed.
+        if (cachedDeckSignature != requestedSignature) {
+            cachedPlaybook = null
+            cachedDeckSignature = null
+        }
 
         onProgress("Analyzing deck with Gemini...")
         Log.i(TAG, "OPUS: Starting analysis for: $deckNames")
@@ -85,12 +100,17 @@ Respond ONLY with valid JSON. No other text.
             JsonParser.parseString(result).asJsonObject // Do not cache incomplete playbooks
 
             val elapsed = System.currentTimeMillis() - startTime
+            if (signature(DeckManager.currentDeck) != requestedSignature) {
+                onProgress("Deck changed during analysis; discarded stale strategy")
+                return null
+            }
 
-            // Cache the playbook
+            // Cache only a strategy generated for the current complete deck.
+            cachedDeckSignature = requestedSignature
             cachedPlaybook = result
 
             // Save to internal storage
-            savePlaybook(context, result)
+            savePlaybook(context, result, requestedSignature)
 
             val previewLen = minOf(result.length, 100)
             Log.i(TAG, "OPUS: Analysis complete in ${elapsed}ms (${result.length} chars)")
@@ -114,10 +134,11 @@ Respond ONLY with valid JSON. No other text.
     /**
      * Save playbook to internal storage for persistence.
      */
-    private fun savePlaybook(context: Context, playbook: String) {
+    private fun savePlaybook(context: Context, playbook: String, deckSignature: String) {
         try {
             val file = File(context.filesDir, PLAYBOOK_FILE)
             file.writeText(playbook)
+            File(context.filesDir, PLAYBOOK_DECK_FILE).writeText(deckSignature)
             Log.i(TAG, "OPUS: Playbook saved to ${file.absolutePath}")
         } catch (e: Exception) {
             Log.w(TAG, "OPUS: Failed to save playbook: ${e.message}")
@@ -131,9 +152,18 @@ Respond ONLY with valid JSON. No other text.
     fun loadSavedPlaybook(context: Context): String? {
         try {
             val file = File(context.filesDir, PLAYBOOK_FILE)
+            val signatureFile = File(context.filesDir, PLAYBOOK_DECK_FILE)
+            val expected = signature(DeckManager.currentDeck)
+            if (DeckManager.currentDeck.size != 8 ||
+                !signatureFile.exists() ||
+                signatureFile.readText().trim() != expected
+            ) {
+                return null
+            }
             if (file.exists()) {
                 val playbook = file.readText()
                 if (playbook.isNotBlank()) {
+                    cachedDeckSignature = expected
                     cachedPlaybook = playbook
                     Log.i(TAG, "OPUS: Loaded saved playbook (${playbook.length} chars)")
                     return playbook
@@ -168,6 +198,7 @@ Respond ONLY with valid JSON. No other text.
         }
         """.trimIndent()
 
+        cachedDeckSignature = signature(DeckManager.currentDeck)
         cachedPlaybook = fallback
         return fallback
     }
