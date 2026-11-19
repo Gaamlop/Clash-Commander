@@ -1062,7 +1062,7 @@ Or when waiting is strategically safer: {"action":"wait","reasoning":"<15 words 
         // If unreadable, leave it unknown instead of inventing a value.
         val availableElixir = HandDetector.ownElixir
         val cost = DeckManager.currentDeck.firstOrNull { it.name == card }?.elixir
-        if (availableElixir != null && cost != null && cost > availableElixir) {
+        if (ElixirPlayGate.blocks(availableElixir, cost)) {
             overlay?.updateStatus("Sin elixir para $card ($availableElixir/$cost); esperando")
             isBusy = false
             return
