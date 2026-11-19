@@ -35,6 +35,10 @@ object HandDetector {
     var currentHand: Map<Int, String> = emptyMap()
         private set
 
+    /** Own elixir visually observed in the most recent frame, null when uncertain. */
+    @Volatile var ownElixir: Int? = null
+        private set
+
     /** Tap authorization: ONLY cards observed in the latest valid frame. */
     val cardToSlot: Map<String, Int>
         get() = freshHand.entries.associate { (slot, card) -> card to slot }
@@ -272,6 +276,9 @@ object HandDetector {
                         cardSlots[card] = slot
                     }
 
+                    // Read the purple bar directly from this same captured frame.
+                    // Unknown is not guessed from the previous elixir value.
+                    val observedElixir = OwnElixirDetector.read(safeCopy)
                     val hand = merged.toMap()
                     // Display may contain smoothed cards. Placement lookup MUST contain
                     // only distinct cards observed in the current frame and same slot.
@@ -287,11 +294,13 @@ object HandDetector {
                     }
                     currentHand = hand
                     freshHand = verified
+                    ownElixir = observedElixir
                     // Publish authorization LAST, after both maps are consistent.
                     captureAuthorization.authorizeFrame(System.currentTimeMillis())
+                    val elixirDisplay = observedElixir?.toString() ?: "?"
                     val freshCount = verified.size
                     diagnosticStatus = if (freshCount >= 3) {
-                        "Vision actual: ${freshCount}/4 | cobertura ${coverage.coveragePercent}% " +
+                        "Vision actual: ${freshCount}/4 | elixir ${elixirDisplay}/10 | cobertura ${coverage.coveragePercent}% " +
                             "(${coverage.frames} cuadros)"
                     } else {
                         "Vision actual: ${freshCount}/4 | cobertura ${coverage.coveragePercent}% " +
