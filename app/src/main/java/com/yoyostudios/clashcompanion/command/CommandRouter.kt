@@ -437,8 +437,16 @@ object CommandRouter {
             "STRATEGIC PLAYBOOK: Not available. Use general Clash Royale knowledge."
         }
 
-        val hand = HandDetector.currentHand
-        val handCards = (0..3).mapNotNull { hand[it] }.joinToString(", ")
+        // Strategy must reason from cards actually seen in this frame, not
+        // older entries retained only for overlay display smoothing.
+        val handCards = HandDetector.cardToSlot.keys.joinToString(", ")
+        val ownElixir = HandDetector.ownElixir
+        val elixirSection = if (ownElixir != null) {
+            "OWN ELIXIR: $ownElixir / 10 (observed in latest game capture). " +
+                "Only propose a card whose actual cost fits available elixir."
+        } else {
+            "OWN ELIXIR: UNKNOWN (bar unverified); do not invent a numeric value."
+        }
         val handSection = if (handCards.isNotBlank()) {
             "CURRENT HAND (cards available to play RIGHT NOW): $handCards"
         } else {
@@ -460,6 +468,7 @@ DECK: $deckJson
 $archetypePlan
 $playbookSection
 $handSection
+$elixirSection
 $arenaSection$lastPlayedSection
 
 VALID ZONES: left_bridge, right_bridge, center, behind_left, behind_right, back_center, front_left, front_right
@@ -472,13 +481,14 @@ Rules:
 - When user says "defend" or "defense": ALWAYS play a defensive card immediately. Trust the user. Use ARENA STATE and/or the arena screenshot to find the most urgent enemy threat (closest to your towers) and choose the correct lane (left/right). If the threat is already on your side or about to cross, place closer (front_left/front_right/center). If the threat is further away, you can place behind_left/behind_right for a stronger counterpush. Buildings (if in deck) prefer center to pull. Troops MAY also be placed at center when needed to pull (e.g., Hog Rider).
 - When user says "push left" or "push right": play an offensive card at that bridge. Prefer win condition (Giant), then support troops (Musketeer, Archers), then cycle cards.
 - When user says "follow up": support LAST PLAYED card in the SAME LANE. Use playbook synergies (e.g. Giant + Musketeer, Giant + Archers). If last played was at left, play support at left. Never cross lanes for follow-up.
-- When user says "suggest" or gives a vague command: pick the best offensive play from current hand.
+- When user says "suggest" or gives a vague command: consider defense first, then a favorable safe play; WAIT if neither is justified.
 - For ambiguous commands: safest positive-elixir-trade play.
 - Buildings go in "center" or "behind_left"/"behind_right".
-- NEVER return "wait" unless user explicitly asks to wait. Always play a card.
+- WAIT when no observed card is affordable, the hand is uncertain, the arena is unreadable, or the trade is unfavorable. Never invent an enemy threat just to play a card.
+- Do not recommend a card when its known elixir cost exceeds observed own elixir.
 
 Respond ONLY with JSON: {"action":"play","card":"<exact card name>","zone":"<zone_key>","reasoning":"<15 words max>"}
-Or ONLY if user says wait: {"action":"wait","reasoning":"<15 words max>"}"""
+Or when waiting is strategically safer: {"action":"wait","reasoning":"<15 words max>"}"""
     }
 
     private fun wantsDefenseVision(text: String): Boolean {
@@ -1044,6 +1054,16 @@ Or ONLY if user says wait: {"action":"wait","reasoning":"<15 words max>"}"""
         // Do not tap stale card slots while recording an unrelated app.
         if (!HandDetector.hasReliableHand(1)) {
             overlay?.updateStatus("No veo la mano. Pulsa Img para guardar diagnostico")
+            isBusy = false
+            return
+        }
+
+        // Reject an unaffordable play when the bar was successfully observed.
+        // If unreadable, leave it unknown instead of inventing a value.
+        val availableElixir = HandDetector.ownElixir
+        val cost = DeckManager.currentDeck.firstOrNull { it.name == card }?.elixir
+        if (ElixirPlayGate.blocks(availableElixir, cost)) {
+            overlay?.updateStatus("Sin elixir para $card ($availableElixir/$cost); esperando")
             isBusy = false
             return
         }
