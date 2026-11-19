@@ -284,7 +284,7 @@ object CommandRouter {
             return
         }
 
-        if (!HandDetector.hasReliableHand(3)) {
+        if (!HandDetector.hasReliableHand(2)) {
             overlay?.updateStatus("SMART: Mano sin detectar. Pulsa Img y revisa captura")
             return
         }
@@ -378,7 +378,7 @@ object CommandRouter {
                 }
 
                 // Never queue a speculative card when our live camera has lost the hand.
-                if (!HandDetector.hasReliableHand(3)) {
+                if (!HandDetector.hasReliableHand(2)) {
                     overlay?.updateStatus("SMART: Captura de mano perdida; jugada cancelada")
                     isBusy = false
                     return@launch
@@ -598,9 +598,9 @@ Or ONLY if user says wait: {"action":"wait","reasoning":"<15 words max>"}"""
 
                 // Skip if busy (another command executing) or hand not ready
                 if (isBusy) continue
-                if (!HandDetector.hasReliableHand(3)) {
+                if (!HandDetector.hasReliableHand(2)) {
                     overlay?.updateStatus(
-                        "AUTO: Esperando 3/4 cartas. ${HandDetector.diagnosticStatus}"
+                        "AUTO: Esperando 2/4 cartas. ${HandDetector.diagnosticStatus}"
                     )
                     continue
                 }
@@ -663,7 +663,7 @@ Or ONLY if user says wait: {"action":"wait","reasoning":"<15 words max>"}"""
                         continue
                     }
 
-                    if (!HandDetector.hasReliableHand(3)) {
+                    if (!HandDetector.hasReliableHand(2)) {
                         overlay?.updateStatus("AUTO: Mano perdida durante analisis; no tocar")
                         isBusy = false
                         continue
@@ -935,7 +935,7 @@ Or ONLY if user says wait: {"action":"wait","reasoning":"<15 words max>"}"""
      */
     fun checkQueue() {
         if (isBusy || commandQueue.isEmpty()) return
-        if (!HandDetector.hasReliableHand(3)) return
+        if (!HandDetector.hasReliableHand(2)) return
 
         val now = System.currentTimeMillis()
 
