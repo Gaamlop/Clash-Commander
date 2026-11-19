@@ -60,6 +60,21 @@ object HandDetector {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var consecutiveNullFrames = 0
 
+    @Volatile
+    var diagnosticStatus: String = "Esperando primera captura"
+        private set
+
+    @Volatile
+    private var lastMatchFrameMs: Long = 0
+
+    /**
+     * Autopilot must not trust stale cards, a menu screenshot, or a
+     * one-card guess. This is a safety gate, not proof that the model is right.
+     */
+    fun hasReliableHand(minCards: Int = 3): Boolean =
+        System.currentTimeMillis() - lastMatchFrameMs < 2_000L &&
+            currentHand.filterKeys { it in 0..3 }.values.distinct().size >= minCards
+
     // ── Match Detection ─────────────────────────────────────────────────
 
     /**
@@ -129,6 +144,9 @@ object HandDetector {
         }
 
         consecutiveNullFrames = 0
+        currentHand = emptyMap()
+        lastMatchFrameMs = 0L
+        diagnosticStatus = "Iniciando detector de cartas"
         var matchDetected = false
         var consecutiveNonMatch = 0
         Log.i(TAG, "CARD-ML: Starting background scan at ${1000 / SCAN_INTERVAL_MS} FPS")
@@ -141,6 +159,9 @@ object HandDetector {
                 val frame = ScreenCaptureService.getLatestFrame()
                 if (frame == null || frame.isRecycled) {
                     consecutiveNullFrames++
+                    if (consecutiveNullFrames >= 3) {
+                        diagnosticStatus = "Captura sin imagen; revisa el permiso de pantalla"
+                    }
                     if (consecutiveNullFrames == 10) {
                         Log.e(TAG, "CARD-ML: Screen capture appears dead — no frames for ${10 * SCAN_INTERVAL_MS}ms")
                     }
@@ -162,8 +183,11 @@ object HandDetector {
                 try {
                     // Match detection with exit tracking
                     if (!matchDetected) {
-                        // Waiting for match to start
+                        // A screenshot of this app instead of the GAME is common
+                        // if Android 14/15 screen sharing was set to Single App.
                         if (!isInMatch(safeCopy)) {
+                            diagnosticStatus = "No veo la arena (${safeCopy.width}x${safeCopy.height}). " +
+                                "Comparte PANTALLA COMPLETA, no solo una app"
                             delay(SCAN_INTERVAL_MS)
                             continue
                         }
@@ -174,6 +198,7 @@ object HandDetector {
                         // Already in match — check if we've left
                         if (!isInMatch(safeCopy)) {
                             consecutiveNonMatch++
+                            diagnosticStatus = "La captura no muestra cartas de la partida"
                             if (consecutiveNonMatch >= MATCH_EXIT_FRAMES) {
                                 matchDetected = false
                                 consecutiveNonMatch = 0
@@ -190,7 +215,10 @@ object HandDetector {
                         }
                     }
 
-                    // Classify all 5 card slots via YOLOv8n-cls
+                    lastMatchFrameMs = System.currentTimeMillis()
+
+                    // Classify all 5 card slots using both calibrated templates
+                    // and the legacy 103-class on-device model.
                     val scanStart = System.currentTimeMillis()
                     val newScan = CardClassifier.classifyHand(safeCopy, deckCards)
                     val scanMs = System.currentTimeMillis() - scanStart
@@ -230,6 +258,13 @@ object HandDetector {
 
                     // Atomic swap of hand state
                     currentHand = hand
+                    val handCount = hand.filterKeys { it in 0..3 }.size
+                    diagnosticStatus = if (handCount >= 3) {
+                        "Vision: ${handCount}/4 cartas (${safeCopy.width}x${safeCopy.height})"
+                    } else {
+                        "Vision: ${handCount}/4. Pulsa Img para revisar captura " +
+                            "(${safeCopy.width}x${safeCopy.height})"
+                    }
 
                     if (hand != lastHand) {
                         lastHand = hand.toMap()
@@ -255,6 +290,9 @@ object HandDetector {
     fun stopScanning() {
         scanJob?.cancel()
         scanJob = null
+        currentHand = emptyMap()
+        lastMatchFrameMs = 0L
+        diagnosticStatus = "Escaner detenido"
         Log.i(TAG, "CARD-ML: Scanning stopped")
     }
 
