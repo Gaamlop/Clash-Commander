@@ -1134,7 +1134,7 @@
         "key": "goblin-hut",
         "name": "Goblin Hut",
         "sc_key": "GoblinHut",
-        "elixir": 5,
+        "elixir": 4,
         "type": "Building",
         "rarity": "Rare",
         "arena": 1,
