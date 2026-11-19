@@ -58,6 +58,7 @@ class MainActivity : ComponentActivity() {
     val speechLoading = mutableStateOf(false)
     val deckCards = mutableStateOf<List<DeckManager.CardInfo>>(emptyList())
     val deckModelWarning = mutableStateOf<String?>(null)
+    val deckImportError = mutableStateOf<String?>(null)
     val opusStatus = mutableStateOf("")
     val opusComplete = mutableStateOf(false)
     val aiStatus = mutableStateOf("Sin configurar")
@@ -119,6 +120,9 @@ class MainActivity : ComponentActivity() {
                 opusComplete.value = true
             }
         }
+
+        // A previous build may have silently persisted only seven cards.
+        deckImportError.value = DeckManager.lastImportError
 
         // Handle incoming deck share intent
         handleDeckIntent(intent)
@@ -311,8 +315,9 @@ class MainActivity : ComponentActivity() {
             }
             else -> null
         }
-        if (cards != null && cards.isNotEmpty()) {
+        if (cards != null && cards.size == 8) {
             DeckManager.setDeck(cards, this)
+            deckImportError.value = null
             deckCards.value = cards
             updateDeckModelWarning(cards)
             // If the STT engine is already running, reload hotwords so recognition
@@ -320,6 +325,9 @@ class MainActivity : ComponentActivity() {
             SpeechService.instance?.reloadHotwords()
             triggerOpusAnalysis(cards)
             Log.i(TAG, "DECK: Loaded ${cards.size} cards. ResNet classifier ready.")
+        } else if (intent.action == Intent.ACTION_SEND || intent.action == Intent.ACTION_VIEW) {
+            deckImportError.value = DeckManager.lastImportError
+                ?: "No se pudo importar el mazo. Comparte el enlace de nuevo."
         }
     }
 
