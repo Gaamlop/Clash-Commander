@@ -1,0 +1,26 @@
+{
+  "size": 12,
+  "notes": "Experimental card-only visual fingerprints from the owner's 2026-11-19 match recording. No raw gameplay footage is stored.",
+  "templates": [
+    {
+      "name": "Minion Giant",
+      "rgb": "hnplnJ2gbYi7fJW6hIudoZiSiJCjhJKxdIard4upc4CccWd6oWY9mnZoK1m4JVu+QFuiVGmXTnS5RWCqJEuhN3jFPI7aY2yWZEtRiXF9ZHKfLlGbRmWtXm+zYYLFPGG0NFWfRo3YH1ujaFF7SkloZld8QlaLO2GnRGWqM0+SPVKTbW+IR16YR4nSRE2Ke1p+Zk1nQjtiUVdxQ0JkNF2dQojPSlWTmpysbKjfSaX2goKUynlSSjZMP1aMTYbIY4vGUqDnacr/YML7YcL/Z8j/UKfVjbFy23xYNx47ODNXOlaAMEyBOHazPX3CRpLYZrrZc6eHkLA2td5f0JWIMyE7MR4/PFVbGSE8FSxtNW+3QWSvZWCWgJY+zvEktMRorpWmLjVMPitEO0BFXoclTV0gQ0c9bGtym7VbwO0nr8YfqctwiszmIzJLJStDJw4tPjw4XYsah3szu1p9qaYfk5o4jWmqZ8fhf8PfHS5IECpJICdDHRMtXgdvzXDU7Zn5nC+ZTkhmbIChWcDzkNfuP05nGzNQGTZPGzFNmyCdurG32s7TuCW4P4ixXLzth96umNas"
+    },
+    {
+      "name": "Barbarian Barrel",
+      "rgb": "7tuq59O35M+128er6M6sxJ5r27Vy9tmD89B+6MF968mK+e+ysYRmn4Bht5Z1oIZl39SjybFr38Zv7tt23sRYwY4qxYws8L5GvINbx5Zt4a58wsiVwr506MB57cmD586Q6deZ4Mlv3ak38bw8xIVauY1iw7N6pZJUpH9D0rdk9NyE8NOD++ee8NyP4q1F+s48pXtBmX9Cn4tOm244qV8+o3NDtYtE7sFu0Ld43Kpl3a9w9MJAs4xDkW4ynHA9nnQ9wH9S4KpqvHVF5JFe5LB58bdy8L9/4p1cjFQgfU0Sil4non1DvqlkxLBp0r124MiD+eKc88qA7LmB8KNmiEgVf1ATkn48u69ciHA4NAgESRwVPBsTn3k70o5HzIZV67FdhUkeeWArn5lPpotDXDwlaisalTsgakIloXIyrlMmolUht3MniFEdb1MljHU4gFApmGcxq1ley0mooFpOhlohg0QuhE0isGskeFw5RTYmVD8kYUQgmC9lrmmq4pTqrTqKcVMlfU0umXE7zJw5tpd1dHeDcHF7YVpepxSoyr3KvZS5xx+zZzwUrXQo3MRw7spo"
+    },
+    {
+      "name": "Wizard",
+      "rgb": "5da3vsfLvs3KzNrJzciwyLmg4M6y4dnE1erdzuni4Onm9/TcoYp+n6OIjrGljZuNhHhemHdExJBI3b1+zNCxvNvLxNPOzLmniZmLhbqTaJV1cW5FqG4ypV8tr3Y95KJD2qdd39q1m49qrFwhmJBza2lCVVE0pHE6umxCv4FQ5KBq145cxXUp2cCNr45TyXQkr49piXQ8elo+Y0MxsHNZ7JJqk1ZDxINtxWk026Vd1LqP3YEquZ6On3Q9VjIlTT87vYhr6J9225hs8aR20nZT2oAx4MSQ551gpIZ6hHhaVzopbnJdq3BJ4ZZf5a1s6rNu6o9Y1Fcj255S476MzI1ClohTT0ApnI1dwHNH3ZVh6KFt1ZtV7JRN6VQnn0YZoFknv5lIeGAsREo0s5tTrnBB3bpk6cRg1K9fxXc86FUa3HEhmlInk3g6QR8EN3JZnZxcs5Q+x3dk1lehtllJ23Ab7Zkv46Qtr21EtL9lZj8bIVNGd4RNsEpvy4PMwW7T1E+R78M27NVf48JQ0ZNMdt+vhHM9Lh4kKzBDoxGluLG2xKTE0jK05dBr8NCH6cBg5I47"
+    },
+    {
+      "name": "Goblin Hut",
+      "rgb": "hoiSt664qq/BpbnFpbfCmK/Ip6nDkKG/kZ60i5KzgISuc3uSwbTD4djxu77Kp6mhopqIpaa4uazQj5TVi5TjkZvOXm3SbXnGqay60rOnw4xTyJdIyJU+x4wzz5pApnI+k1xNpXZboJOghpTSw5Nw1JFSpG4qr3wxv40+3bJS2qtO47ZS1qlOlWIoiFIqnY+er3lDp3Eq0aNLw448wY8/vJBBrIVAmHI3kmg3jGU0eUwllHdyuqaTroVPi10lWTMbXDEcUiYSTSESTiMXTiQXXS4ig0gxn3BpfoCUz9Hhd2RlQh4NSCYXSCseYW1YdXhNc0kfcUskn145lF9YKSM7e3yeo5yZeUomVi8cSUkufpBUlZpBfXc7g2EuaTYhf1BEYE9aPy0omINitYtifEYtOzgQVXQtcIYvSFpkRDxGVDUwWTo0v5qib1NKYEA0t4RfflkyUA82jyGHZUFJUjgfYzUeNB8LQEcyupWlfmJnSyQhckQxnzuA1X/T9pn5ojyIQmIgSlUrRnQ8V4h6ZmFOQkgnSVgkRz4xoyCiub+62L7VsyupPnwzPGsuS35GYI9u"
+    },
+    {
+      "name": "Royal Ghost",
+      "rgb": "O0F5Sj9qZGJ+fXuIqJ+WtKuPxb+im5qWbnF+SUNYMyBHLTJrZ2Jdr6WVzsKg8Oiy+OWb37998NibwrqI29zAtcrOgZmkW15rfH11x7F4wq9/1dmyzM6uwb+qwMS7qr2/o8bBXqfDSZGtU2FtPFVtk7vHqNDgb5TDapDNg67mk8H3nsz/v+H8nMbZQoGhQlFhPFdvnsnn2/P7x93rxtfqlrLUiK7XucjZ4+3yn8TaQ32iRVNiR2N7kr7XrtLofIawbnabcJbLnMTydoSrjJ7GmsbgUoCkP0teepWhkMPeoM7rgp7VepnSjrHnqcTzr8vypb7p5/n8wdXjPU1igZ2on83wqMzonMbrlLTWhJq6qrvZscff1+z36fv+1eLtRVFoh52sstLrt9nsstryus/pudbky+zw0+f61eT25PX71ebtWGJ0iJiltM3kuNjnwt3y0ervyJ7W0GHRzLza5/X63enz1+XsbXaBlJWdwtPm1Of13fD5t2O8rmqp4HratWO+3fDt7O/10tvhYWVrVl1tdXWApKmtvrbHswuvspax0KXKxze/sL2+mJWbaW11PUpe"
+    }
+  ]
+}
