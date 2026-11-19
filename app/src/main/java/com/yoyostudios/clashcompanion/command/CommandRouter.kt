@@ -430,7 +430,7 @@ object CommandRouter {
         val deckJson = DeckManager.getDeckJson()
         val archetypePlan = DeckProfiles.promptFor(deckCards)
 
-        val playbook = OpusCoach.cachedPlaybook
+        val playbook = OpusCoach.playbookFor(DeckManager.currentDeck)
         val playbookSection = if (!playbook.isNullOrBlank()) {
             "STRATEGIC PLAYBOOK (from deep analysis):\n$playbook"
         } else {
