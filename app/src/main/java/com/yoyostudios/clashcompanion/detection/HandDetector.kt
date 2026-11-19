@@ -35,10 +35,9 @@ object HandDetector {
     var currentHand: Map<Int, String> = emptyMap()
         private set
 
-    /** Convenience: cardName → slotIndex (hand slots 0-3 only) */
+    /** Tap authorization: ONLY cards observed in the latest valid frame. */
     val cardToSlot: Map<String, Int>
-        get() = currentHand.filterKeys { it < 4 }
-            .entries.associate { (slot, card) -> card to slot }
+        get() = freshHand.entries.associate { (slot, card) -> card to slot }
 
     /** The next card waiting in queue (slot 4), or null */
     val nextCard: String?
@@ -65,7 +64,8 @@ object HandDetector {
         private set
 
     private val captureAuthorization = CaptureAuthorization()
-    @Volatile private var reliableFreshSlots: Int = 0
+    /** Immutable slot map for directly observed cards, excluding temporal smoothing. */
+    @Volatile private var freshHand: Map<Int, String> = emptyMap()
 
     /**
      * Autopilot must not trust stale cards, a menu screenshot, or a
@@ -73,7 +73,7 @@ object HandDetector {
      */
     fun hasReliableHand(minCards: Int = 3): Boolean =
         captureAuthorization.isFresh(System.currentTimeMillis()) &&
-            reliableFreshSlots >= minCards
+            freshHand.size >= minCards
 
     // ── Match Detection ─────────────────────────────────────────────────
 
@@ -146,7 +146,7 @@ object HandDetector {
         consecutiveNullFrames = 0
         currentHand = emptyMap()
         captureAuthorization.revoke()
-        reliableFreshSlots = 0
+        freshHand = emptyMap()
         diagnosticStatus = "Iniciando detector de cartas"
         var matchDetected = false
         var consecutiveNonMatch = 0
@@ -271,14 +271,13 @@ object HandDetector {
                     }
 
                     val hand = merged.toMap()
-                    // Smoothing helps the display but must not authorize actions:
-                    // only cards recognized in THIS frame count toward reliability.
-                    val freshSlots = FreshHandAuthorization.verifiedSlots(newScan, hand)
-                    reliableFreshSlots = freshSlots
-                    captureAuthorization.authorizeFrame(System.currentTimeMillis())
-
-                    // Atomic swap of hand state
+                    // Display may contain smoothed cards. Placement lookup MUST contain
+                    // only distinct cards observed in the current frame and same slot.
+                    val verified = FreshHandAuthorization.verifiedCards(newScan, hand)
                     currentHand = hand
+                    freshHand = verified
+                    // Publish authorization LAST, after both maps are consistent.
+                    captureAuthorization.authorizeFrame(System.currentTimeMillis())
                     val handCount = hand.filterKeys { it in 0..3 }.size
                     diagnosticStatus = if (handCount >= 3) {
                         "Vision: ${handCount}/4 cartas (${safeCopy.width}x${safeCopy.height})"
@@ -314,7 +313,7 @@ object HandDetector {
         scanJob = null
         currentHand = emptyMap()
         captureAuthorization.revoke()
-        reliableFreshSlots = 0
+        freshHand = emptyMap()
         diagnosticStatus = "Escaner detenido"
         Log.i(TAG, "CARD-ML: Scanning stopped")
     }
