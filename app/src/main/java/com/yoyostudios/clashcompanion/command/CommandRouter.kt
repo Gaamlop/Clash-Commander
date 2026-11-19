@@ -284,6 +284,11 @@ object CommandRouter {
             return
         }
 
+        if (!HandDetector.hasReliableHand(3)) {
+            overlay?.updateStatus("SMART: Mano sin detectar. Pulsa Img y revisa captura")
+            return
+        }
+
         isBusy = true
         val startMs = System.currentTimeMillis()
         overlay?.updateStatus("SMART: Thinking...")
@@ -368,6 +373,13 @@ object CommandRouter {
                 if (resolvedZone == null) {
                     overlay?.updateStatus("SMART: Unknown zone '$zone'")
                     Log.w(TAG, "CMD: SMART returned unknown zone: $zone")
+                    isBusy = false
+                    return@launch
+                }
+
+                // Never queue a speculative card when our live camera has lost the hand.
+                if (!HandDetector.hasReliableHand(3)) {
+                    overlay?.updateStatus("SMART: Captura de mano perdida; jugada cancelada")
                     isBusy = false
                     return@launch
                 }
@@ -586,8 +598,12 @@ Or ONLY if user says wait: {"action":"wait","reasoning":"<15 words max>"}"""
 
                 // Skip if busy (another command executing) or hand not ready
                 if (isBusy) continue
-                val hand = HandDetector.currentHand
-                if (hand.filterKeys { it < 4 }.isEmpty()) continue
+                if (!HandDetector.hasReliableHand(3)) {
+                    overlay?.updateStatus(
+                        "AUTO: Esperando 3/4 cartas. ${HandDetector.diagnosticStatus}"
+                    )
+                    continue
+                }
 
                 // Call Gemini for decision
                 try {
@@ -596,11 +612,11 @@ Or ONLY if user says wait: {"action":"wait","reasoning":"<15 words max>"}"""
 
                     val result = withContext(Dispatchers.IO) {
                         val systemPrompt = buildSmartPrompt()
-                        val userText = "AUTOPILOT: You MUST play a card NOW from your current hand. " +
-                                "Never return wait — always play something. " +
-                                "Use ARENA STATE and/or the arena screenshot to defend correctly. " +
-                                "Prioritize: 1) Counter enemy threats. 2) Build pushes with synergies from the playbook. " +
-                                "3) Cycle cheap cards (Knight, Archers) when no clear play. Always place cards — never idle."
+                        val userText = "AUTOPILOT: Choose a SAFE action from the verified current hand. " +
+                                "Use the actual DECK and screenshot, never assume Knight or Archers. " +
+                                "Priority: defend immediate threats, then counterpush if elixir permits. " +
+                                "You MAY return wait when elixir is insufficient or the board is unclear. " +
+                                "Never recommend a card missing from the verified hand."
 
                         val arenaImg = captureArenaImageBase64()
                         if (arenaImg != null) {
@@ -647,6 +663,11 @@ Or ONLY if user says wait: {"action":"wait","reasoning":"<15 words max>"}"""
                         continue
                     }
 
+                    if (!HandDetector.hasReliableHand(3)) {
+                        overlay?.updateStatus("AUTO: Mano perdida durante analisis; no tocar")
+                        isBusy = false
+                        continue
+                    }
                     if (!HandDetector.cardToSlot.containsKey(resolvedCard)) {
                         withContext(Dispatchers.Main) {
                             overlay?.updateStatus("AUTO: $resolvedCard not in hand | $reasoning")
@@ -914,6 +935,7 @@ Or ONLY if user says wait: {"action":"wait","reasoning":"<15 words max>"}"""
      */
     fun checkQueue() {
         if (isBusy || commandQueue.isEmpty()) return
+        if (!HandDetector.hasReliableHand(3)) return
 
         val now = System.currentTimeMillis()
 
@@ -1003,6 +1025,13 @@ Or ONLY if user says wait: {"action":"wait","reasoning":"<15 words max>"}"""
             val msg = "Low confidence: $card? ($pct% < ${(threshold * 100).toInt()}%)"
             overlay?.updateStatus(msg)
             Log.w(TAG, "CMD: $msg")
+            isBusy = false
+            return
+        }
+
+        // Do not tap stale card slots while recording an unrelated app.
+        if (!HandDetector.hasReliableHand(1)) {
+            overlay?.updateStatus("No veo la mano. Pulsa Img para guardar diagnostico")
             isBusy = false
             return
         }
