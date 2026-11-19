@@ -2,7 +2,6 @@ package com.yoyostudios.clashcompanion.deck
 
 import android.content.Context
 import android.content.res.AssetManager
-import android.net.Uri
 import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -19,12 +18,23 @@ object DeckManager {
     private const val PREFS_NAME = "clash_companion_deck"
     private const val PREF_DECK_IDS = "deck_card_ids"
 
+    /** Error from the most recent import, visible to the user. Never import partial decks. */
+    var lastImportError: String? = null
+        private set
+
+    private fun rejectImport(message: String): List<CardInfo>? {
+        lastImportError = message
+        Log.w(TAG, "DECK: $message")
+        return null
+    }
+
     data class CardInfo(
         val id: Long,
         val name: String,
         val elixir: Int,
         val type: String,
-        val key: String
+        val key: String,
+        val imageUrl: String = ""
     )
 
     /** Raw JSON card entry from cr-api-data */
@@ -34,6 +44,7 @@ object DeckManager {
         val elixir: Int = 0,
         val type: String = "",
         val key: String = "",
+        val image_url: String = "",
         val rarity: String = "",
         val is_evolved: Boolean = false
     )
@@ -66,7 +77,8 @@ object DeckManager {
                         name = raw.name,
                         elixir = raw.elixir,
                         type = raw.type,
-                        key = raw.key
+                        key = raw.key,
+                        imageUrl = raw.image_url
                     )
                 }
 
@@ -83,46 +95,8 @@ object DeckManager {
      * Returns null if URL is invalid or cards not found.
      */
     fun parseDeckUrl(url: String): List<CardInfo>? {
-        val db = cardDatabase
-        if (db == null || db.isEmpty()) {
-            Log.e(TAG, "DECK: Card database not loaded")
-            return null
-        }
-
-        try {
-            val uri = Uri.parse(url)
-            val deckParam = uri.getQueryParameter("deck")
-            if (deckParam.isNullOrBlank()) {
-                Log.w(TAG, "DECK: No 'deck' query param in URL: $url")
-                return null
-            }
-
-            val ids = deckParam.split(";").mapNotNull { it.trim().toLongOrNull() }
-            if (ids.size != 8) {
-                Log.w(TAG, "DECK: Expected 8 card IDs, got ${ids.size} from: $deckParam")
-                // Still try to load what we can
-                if (ids.isEmpty()) return null
-            }
-
-            val cards = ids.mapNotNull { id ->
-                val card = db[id]
-                if (card == null) {
-                    Log.w(TAG, "DECK: Unknown card ID: $id")
-                }
-                card
-            }
-
-            if (cards.isEmpty()) {
-                Log.e(TAG, "DECK: No valid cards found")
-                return null
-            }
-
-            Log.i(TAG, "DECK: Parsed ${cards.size} cards from URL")
-            return cards
-        } catch (e: Exception) {
-            Log.e(TAG, "DECK: Failed to parse URL: ${e.message}", e)
-            return null
-        }
+        // Supports both /deck/en?deck=... and /en?clashroyale://copyDeck?deck=...
+        return parseDeckFromText(url)
     }
 
     /**
@@ -145,8 +119,7 @@ object DeckManager {
             return parseDeckParam(deckParam)
         }
 
-        Log.w(TAG, "DECK: No deck param found in text: $text")
-        return null
+        return rejectImport("No se encontro un enlace de mazo valido")
     }
 
     /**
@@ -155,28 +128,28 @@ object DeckManager {
     fun parseDeckParam(deckParam: String): List<CardInfo>? {
         val db = cardDatabase
         if (db == null || db.isEmpty()) {
-            Log.e(TAG, "DECK: Card database not loaded")
-            return null
+            return rejectImport("No se pudo abrir el catalogo de cartas")
         }
 
-        val ids = deckParam.split(";").mapNotNull { it.trim().toLongOrNull() }
-        if (ids.isEmpty()) {
-            Log.w(TAG, "DECK: No valid card IDs in: $deckParam")
-            return null
+        val parts = deckParam.split(";")
+        val ids = parts.map { it.trim().toLongOrNull() }
+        if (ids.size != 8 || ids.any { it == null }) {
+            return rejectImport("El enlace debe contener exactamente 8 cartas validas")
+        }
+        val validIds = ids.filterNotNull()
+        if (validIds.distinct().size != 8) {
+            return rejectImport("El mazo contiene cartas duplicadas")
+        }
+        val unknown = validIds.filter { it !in db }
+        if (unknown.isNotEmpty()) {
+            return rejectImport(
+                "Cartas no reconocidas: ${unknown.joinToString()}. Actualiza Clash Commander"
+            )
         }
 
-        val cards = ids.mapNotNull { id ->
-            val card = db[id]
-            if (card == null) Log.w(TAG, "DECK: Unknown card ID: $id")
-            card
-        }
-
-        if (cards.isEmpty()) {
-            Log.e(TAG, "DECK: No valid cards found")
-            return null
-        }
-
-        Log.i(TAG, "DECK: Parsed ${cards.size} cards")
+        val cards = validIds.map { db.getValue(it) }
+        lastImportError = null
+        Log.i(TAG, "DECK: Parsed 8 cards, including latest cards")
         return cards
     }
 
@@ -184,6 +157,10 @@ object DeckManager {
      * Set the current deck and update all dependent systems.
      */
     fun setDeck(cards: List<CardInfo>, context: Context? = null) {
+        require(cards.size == 8 && cards.map { it.id }.distinct().size == 8) {
+            "Only complete eight-card decks may be installed"
+        }
+        lastImportError = null
         currentDeck = cards
 
         // Update CommandRouter with card names
@@ -276,15 +253,18 @@ object DeckManager {
         try {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val idsString = prefs.getString(PREF_DECK_IDS, null) ?: return false
-
             val ids = idsString.split(";").mapNotNull { it.trim().toLongOrNull() }
-            val cards = ids.mapNotNull { db[it] }
-
-            if (cards.size >= 4) { // At least half a deck
-                setDeck(cards)
-                Log.i(TAG, "DECK: Restored saved deck (${cards.size} cards)")
-                return true
+            val valid = ids.size == 8 && ids.distinct().size == 8 && ids.all { it in db }
+            if (!valid) {
+                // Older builds silently saved partial 7-card decks. Do not restore them.
+                prefs.edit().remove(PREF_DECK_IDS).apply()
+                lastImportError = "El mazo guardado estaba incompleto. Compartelo de nuevo desde Clash Royale."
+                Log.w(TAG, "DECK: Removed invalid saved deck")
+                return false
             }
+            setDeck(ids.map { db.getValue(it) })
+            Log.i(TAG, "DECK: Restored saved deck (8 cards)")
+            return true
         } catch (e: Exception) {
             Log.w(TAG, "DECK: Failed to load saved deck: ${e.message}")
         }
@@ -311,7 +291,9 @@ object DeckManager {
      * Get the card art image URL from RoyaleAPI CDN.
      */
     fun getCardImageUrl(card: CardInfo): String =
-        "https://raw.githubusercontent.com/RoyaleAPI/cr-api-assets/master/cards-150/${card.key}.png"
+        card.imageUrl.ifBlank {
+            "https://raw.githubusercontent.com/RoyaleAPI/cr-api-assets/master/cards-150/${card.key}.png"
+        }
 
     /**
      * Build a JSON representation of the deck for sending to Claude.
