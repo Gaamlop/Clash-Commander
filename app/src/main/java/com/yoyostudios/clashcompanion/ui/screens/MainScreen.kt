@@ -61,6 +61,7 @@ fun MainScreen(activity: MainActivity) {
     val speechLoading by activity.speechLoading
     val deck by activity.deckCards
     val deckModelWarning by activity.deckModelWarning
+    val deckImportError by activity.deckImportError
     val opusStatus by activity.opusStatus
     val opusComplete by activity.opusComplete
     val aiStatus by activity.aiStatus
@@ -128,7 +129,7 @@ fun MainScreen(activity: MainActivity) {
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (deck.isNotEmpty()) {
+                        if (deck.size == 8) {
                             Icon(
                                 painter = painterResource(id = R.drawable.ic_check_filled),
                                 contentDescription = "Done",
@@ -146,9 +147,9 @@ fun MainScreen(activity: MainActivity) {
                             modifier = Modifier.weight(1f)
                         )
                         Text(
-                            text = if (deck.isNotEmpty()) "LOADED" else "OPEN CR",
+                            text = if (deck.size == 8) "8/8 LOADED" else "OPEN CR",
                             style = CrTypography.labelLarge,
-                            color = if (deck.isNotEmpty()) CrColors.Green else CrColors.TextGold,
+                            color = if (deck.size == 8) CrColors.Green else CrColors.TextGold,
                             fontSize = 12.sp
                         )
                     }
@@ -194,6 +195,16 @@ fun MainScreen(activity: MainActivity) {
             Spacer(modifier = Modifier.height(20.dp))
 
             // ── Deck Section ──
+            if (!deckImportError.isNullOrBlank()) {
+                CrCard(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = deckImportError ?: "",
+                        style = CrTypography.bodyMedium,
+                        color = CrColors.Error
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
             if (deck.isEmpty()) {
                 DeckEmptyCard()
             } else {
@@ -444,7 +455,7 @@ private fun DeckCard(
                     CrCrown(size = 18.dp)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (opusComplete) "Strategy Ready" else "Analyzing...",
+                        text = if (opusComplete) "Strategy Ready" else opusStatus,
                         style = CrTypography.titleMedium,
                         color = if (opusComplete) CrColors.TextGold else CrColors.SmartPurple,
                         modifier = Modifier.weight(1f)
