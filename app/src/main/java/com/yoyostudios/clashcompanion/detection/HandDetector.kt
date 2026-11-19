@@ -151,6 +151,7 @@ object HandDetector {
         consecutiveNullFrames = 0
         freshCoverage.reset()
         currentHand = emptyMap()
+        ownElixir = null
         captureAuthorization.revoke()
         freshHand = emptyMap()
         diagnosticStatus = "Iniciando detector de cartas"
@@ -167,6 +168,7 @@ object HandDetector {
                 if (frame == null || frame.isRecycled) {
                     // Fail closed immediately: a lost capture must never authorize a
                     // tap using cards from the previous screenshot.
+                    ownElixir = null
                     captureAuthorization.revoke()
                     consecutiveNullFrames++
                     if (consecutiveNullFrames >= 3) {
@@ -184,12 +186,14 @@ object HandDetector {
                 val safeCopy = try {
                     frame.copy(Bitmap.Config.ARGB_8888, false)
                 } catch (e: Exception) {
+                    ownElixir = null
                     captureAuthorization.revoke()
                     Log.w(TAG, "CARD-ML: Frame copy failed: ${e.message}")
                     delay(SCAN_INTERVAL_MS)
                     continue
                 }
                 if (safeCopy == null) {
+                    ownElixir = null
                     captureAuthorization.revoke()
                     delay(SCAN_INTERVAL_MS)
                     continue
@@ -215,6 +219,7 @@ object HandDetector {
                             // Keep the exit debounce for UI state, but invalidate
                             // authorization on the FIRST bad frame. The 10-frame
                             // grace period must never permit a stale autopilot play.
+                            ownElixir = null
                             captureAuthorization.revoke()
                             consecutiveNonMatch++
                             diagnosticStatus = "La captura no muestra cartas de la partida"
@@ -236,6 +241,7 @@ object HandDetector {
 
                     // Revoke before inference: the prior scan cannot authorize a tap while
                     // classification is running or when its results are uncertain.
+                    ownElixir = null
                     captureAuthorization.revoke()
                     Coordinates.updateFromCapture(safeCopy.width, safeCopy.height)
 
@@ -317,6 +323,7 @@ object HandDetector {
                         }
                     }
                 } catch (e: Exception) {
+                    ownElixir = null
                     captureAuthorization.revoke()
                     Log.w(TAG, "CARD-ML: Scan error: ${e.message}")
                 } finally {
@@ -333,6 +340,7 @@ object HandDetector {
         scanJob?.cancel()
         scanJob = null
         currentHand = emptyMap()
+        ownElixir = null
         captureAuthorization.revoke()
         freshHand = emptyMap()
         diagnosticStatus = "Escaner detenido"
