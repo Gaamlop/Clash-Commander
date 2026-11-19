@@ -7,6 +7,7 @@ on:
     branches:
       - main
       - master
+      - fix/autopilot-1.4.1-verified
   pull_request:
     branches:
       - main
