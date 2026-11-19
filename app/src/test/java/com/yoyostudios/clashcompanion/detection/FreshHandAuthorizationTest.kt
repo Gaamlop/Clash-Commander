@@ -4,6 +4,42 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class FreshHandAuthorizationTest {
+    @Test fun coverageCountsFreshSlotsNotSmoothedSlots() {
+        val meter = FreshHandCoverage()
+        meter.record(4)
+        meter.record(2)
+        val snapshot = meter.record(0)
+        assertEquals(3, snapshot.frames)
+        assertEquals(6, snapshot.recognizedSlots)
+        assertEquals(50, snapshot.coveragePercent)
+        assertEquals(1, snapshot.fullFrames)
+        assertEquals(33, snapshot.fullHandPercent)
+        assertEquals(1, snapshot.emptyFrames)
+    }
+
+    @Test fun coverageEmptySampleHasZeroRates() {
+        val snapshot = FreshHandCoverage().snapshot()
+        assertEquals(0, snapshot.frames)
+        assertEquals(0, snapshot.coveragePercent)
+        assertEquals(0, snapshot.fullHandPercent)
+    }
+
+    @Test fun coverageResetSeparatesSessions() {
+        val meter = FreshHandCoverage()
+        meter.record(4)
+        meter.reset()
+        val snapshot = meter.record(1)
+        assertEquals(1, snapshot.frames)
+        assertEquals(1, snapshot.recognizedSlots)
+        assertEquals(25, snapshot.coveragePercent)
+        assertEquals(0, snapshot.fullFrames)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun coverageRejectsImpossibleSlotCount() {
+        FreshHandCoverage().record(5)
+    }
+
     @Test fun rejectsSmoothedCardsMissingFromCurrentFrame() {
         val display = mapOf(0 to "Tesla", 1 to "Knight", 2 to "Skeletons", 3 to "Rocket")
         val observed = mapOf(0 to "Tesla", 2 to "Skeletons")
