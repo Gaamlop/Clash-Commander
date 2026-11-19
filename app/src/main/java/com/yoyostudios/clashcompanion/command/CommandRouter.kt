@@ -331,7 +331,7 @@ object CommandRouter {
             return null
         }
         if (isGestureInFlight || !HandDetector.hasReliableHand(2)) {
-            overlay?.updateStatus("IA: Esperando una mano verificada de al menos 2 cartas")
+            overlay?.updateStatus("AUTO: Reintentando reconocimiento de mano (minimo 2 cartas)")
             return null
         }
         cancelPendingDecision()
@@ -379,6 +379,7 @@ object CommandRouter {
                     )
                 }
                 ensureActive()
+                Log.i(TAG, "$label: decisionLatencyMs=${SystemClock.elapsedRealtime() - context.requestedAtElapsedRealtime}")
                 if (!decisionIsCurrent(context)) {
                     overlay?.updateStatus("$label: Situacion cambiada; decision descartada")
                     return@launch
@@ -427,7 +428,8 @@ object CommandRouter {
                 }
             } catch (error: TimeoutCancellationException) {
                 if (context.revision == decisionRevision) {
-                    overlay?.updateStatus("$label: Respuesta demasiado lenta; jugada cancelada")
+                    overlay?.updateStatus("$label: Gemini tardo mas de 6 s; reintentando automaticamente")
+                    Log.i(TAG, "$label: timeoutMs=${SystemClock.elapsedRealtime() - context.requestedAtElapsedRealtime}")
                 }
             } catch (error: CancellationException) {
                 throw error
@@ -455,12 +457,9 @@ object CommandRouter {
     private fun buildSmartPrompt(): String {
         val deckJson = DeckManager.getDeckJson()
 
-        val playbook = OpusCoach.cachedPlaybook
-        val playbookSection = if (!playbook.isNullOrBlank()) {
-            "STRATEGIC PLAYBOOK (from deep analysis):\n$playbook"
-        } else {
-            "STRATEGIC PLAYBOOK: Not available. Use general Clash Royale knowledge."
-        }
+        val playbookSection = TacticalPromptBrief.fromPlaybook(
+            OpusCoach.cachedPlaybook, HandDetector.currentVerifiedHand.filterKeys { it in 0..3 }.values.toSet()
+        )
 
         val hand = HandDetector.currentVerifiedHand
         val handCards = (0..3).mapNotNull { hand[it] }.joinToString(", ")
@@ -607,12 +606,15 @@ Or when waiting is safer: {"action":"wait","observed_elixir":null,"reasoning":"<
         overlay?.updateStatus("AUTOPILOT: Activo; esperando una partida verificable")
         overlay?.setAutopilotActive(true)
         autopilotJob = scope.launch {
-            while (isActive) {
-                delay(AUTOPILOT_INTERVAL_MS)
-                if (isBusy || isGestureInFlight) continue
-                // Cancelling a child decision for a human command leaves this loop available.
-                launchDecision("autopilot", sttLatencyMs = 0, autonomous = true)?.join()
-            }
+            AutopilotLoop.run(AUTOPILOT_INTERVAL_MS, cycle = {
+                if (!isBusy && !isGestureInFlight) {
+                    launchDecision("autopilot", sttLatencyMs = 0, autonomous = true)?.join()
+                }
+            }, onFailure = { failure ->
+                cancelPendingDecision()
+                overlay?.updateStatus("AUTO: Observacion fallida; reintentando automaticamente")
+                Log.w(TAG, "AUTO: Cycle retry (${failure.javaClass.simpleName})")
+            })
         }
     }
 

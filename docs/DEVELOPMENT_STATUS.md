@@ -65,3 +65,31 @@ La instalación y las pruebas de partida en el teléfono siguen pendientes.
 La integración conserva DeckProfiles como única definición de los tres mazos,
 los helpers de autorización de main y su evaluador offline de repeticiones.
 Las pruebas del evaluador no constituyen una evaluación sobre un vídeo real.
+
+## Incidente observado: una sola jugada y respuestas lentas
+
+El usuario confirmó que Auto mostró respuesta demasiado lenta/decisión descartada
+tras un Barril de Duendes. Img no forma parte del ciclo: es diagnóstico opcional.
+Se mantiene la caducidad de seis segundos; ampliar la validez de una captura
+antigua no sería una corrección de percepción. La revisión 1.4.2 limita el
+playbook enviado en cada decisión a un resumen de cartas en mano, condiciones
+de victoria y restricciones. El análisis completo sigue guardado localmente.
+Pruebas de contexto grande verifican la reducción y que JSON malformado no
+interrumpa el ciclo. Una prueba del ciclo simula jugada, error de observación,
+espera y segunda jugada sin intervención; cancelar sí termina el ciclo.
+Se registran automáticamente latencias y timeouts sin capturas ni credenciales.
+Pendiente: medir si esta reducción baja la latencia real de Gemini en el teléfono;
+no se afirma resuelto el incidente sin esa medida.
+
+## Referencia externa solicitada: Clasher
+
+Fuentes consultadas: https://github.com/vegetableleaf/ClashAI/blob/main/README.md
+y https://github.com/vegetableleaf/ClashAI/blob/main/RESULTS.md . El README
+describe imitación de repeticiones y aprendizaje por refuerzo mediante autojuego
+en simulador; especifica que checkpoints y datasets no están incluidos. Los
+resultados publicados no acreditan por sí solos que sea el jugador top10 citado
+por el usuario. Está pendiente confirmar perfil/vídeo. No se ha copiado código
+ni integrado un modelo de ese repositorio. La inferencia rápida de una política
+entrenada requiere un objetivo independiente: contrato de observaciones, modelo
+disponible y evaluación reproducible. La corrección actual reduce contexto
+remoto y verifica reintentos; no convierte Gemini en una política entrenada.

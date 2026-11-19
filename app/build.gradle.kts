@@ -12,8 +12,8 @@ android {
         applicationId = "com.yoyostudios.clashcompanion"
         minSdk = 28
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.4.1-experimental"
+        versionCode = 7
+        versionName = "1.4.2-experimental"
 
         // Speech runtime is packaged for ARM64; do not advertise unsupported ABIs.
         ndk {

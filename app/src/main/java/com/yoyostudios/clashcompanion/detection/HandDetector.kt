@@ -125,7 +125,7 @@ object HandDetector {
                     misses = emptyMap()
                     onHandChanged?.invoke(emptyMap())
                 }
-                diagnosticStatus = "Captura sin imagen reciente; renueva el permiso de pantalla"
+                diagnosticStatus = "Captura sin imagen reciente; esperando un fotograma nuevo"
                 delay(SCAN_INTERVAL_MS)
                 continue
             }
@@ -185,7 +185,7 @@ object HandDetector {
                         misses = merged.misses
                         val count = merged.detected.keys.count { it in 0..3 }
                         diagnosticStatus = "Vision: $count/4 verificadas (${frame.width}x${frame.height})" +
-                            if (count < 3) ". Pulsa Img para revisar captura" else ""
+                            if (count < 2) ". Detector reintentando automaticamente" else ""
                         if (merged.hand != lastHand || merged.detected != lastDetected) {
                             onHandChanged?.invoke(merged.hand)
                             Log.i(TAG, "CARD-ML: $count verified cards (${SystemClock.elapsedRealtime() - startedAt}ms)")
