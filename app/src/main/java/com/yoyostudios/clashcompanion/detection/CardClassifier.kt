@@ -44,6 +44,14 @@ object CardClassifier {
 
     private var module: Module? = null
 
+    // Aggregate rejection reasons without storing screenshots or card crops.
+    private var diagnosticScans = 0
+    private val rejectionCounts = mutableMapOf<String, Int>()
+
+    private fun recordRejection(reason: String) {
+        rejectionCounts[reason] = (rejectionCounts[reason] ?: 0) + 1
+    }
+
     /** Class index -> DeckManager card key (e.g. 0 -> "archers", 29 -> "fireball") */
     private var idx2key: Map<Int, String> = emptyMap()
 
@@ -114,7 +122,10 @@ object CardClassifier {
      * @return Map of slotIndex (0-3 hand, 4 next) -> DeckManager card name
      */
     fun classifyHand(frame: Bitmap, deckCards: List<String>): Map<Int, String> {
-        if (!isReady && !CardTemplateMatcher.isReady()) return emptyMap()
+        if (!isReady && !CardTemplateMatcher.isReady()) {
+            recordRejection("model_and_templates_unavailable")
+            return emptyMap()
+        }
 
         val rois = Coordinates.getCardSlotROIs(frame.width, frame.height)
         val nextRoi = Coordinates.getNextCardROI(frame.width, frame.height)
@@ -125,7 +136,11 @@ object CardClassifier {
         // Build deck-only index mapping: find which output indices correspond to deck cards
         // This restricts classification to ONLY the 8 deck cards instead of all 103
         val deckIndices = mutableListOf<Pair<Int, String>>() // (model output index, DeckManager name)
-        for (card in DeckManager.currentDeck) {
+        // Honor the deck explicitly passed by the scanner, not an unrelated
+        // mutable global deck snapshot. A stale deck silently rejects all slots.
+        val requested = deckCards.toSet()
+        val selectedDeck = DeckManager.currentDeck.filter { it.name in requested }
+        for (card in selectedDeck) {
             val wantKey = card.key
             val wantKeyNorm = norm(card.key)
             val wantNameNorm = norm(card.name)
@@ -151,7 +166,7 @@ object CardClassifier {
         }
 
         val result = mutableMapOf<Int, String>()
-        val allowedNames = DeckManager.currentDeck.map { it.name }.toSet()
+        val allowedNames = selectedDeck.map { it.name }.toSet()
         val usedNames = mutableSetOf<String>()
 
         // Classify slots 0-4
@@ -159,7 +174,11 @@ object CardClassifier {
         allRois.add(4 to nextRoi)
 
         for ((slot, roi) in allRois) {
-            val crop = safeCrop(frame, roi) ?: continue
+            val crop = safeCrop(frame, roi)
+            if (crop == null) {
+                recordRejection("crop_failed")
+                continue
+            }
             try {
                 // Owner's video-derived fingerprints recognize new/updated card art.
                 // Only main-hand cards: the much smaller next-card artwork is
@@ -176,8 +195,11 @@ object CardClassifier {
                 // Model fallback only when the best class across ALL 103 classes
                 // is also an actual deck card with strong probability.
                 // Previously 0.05 among seven deck classes caused false matches.
-                val probs = classifyRaw(crop) ?: continue
-                if (probs.isEmpty()) continue
+                val probs = classifyRaw(crop)
+                if (probs == null || probs.isEmpty()) {
+                    recordRejection("inference_unavailable")
+                    continue
+                }
                 var globalBestIdx = 0
                 for (i in 1 until probs.size) {
                     if (probs[i] > probs[globalBestIdx]) globalBestIdx = i
@@ -188,12 +210,24 @@ object CardClassifier {
                 if (deckMatch != null && probs[globalBestIdx] >= CONFIDENCE_THRESHOLD) {
                     result[slot] = deckMatch.second
                     usedNames.add(deckMatch.second)
+                } else {
+                    recordRejection(when {
+                        probs[globalBestIdx] < CONFIDENCE_THRESHOLD -> "low_confidence"
+                        deckIndices.none { it.first == globalBestIdx } -> "top_class_outside_deck"
+                        else -> "duplicate_card"
+                    })
                 }
             } finally {
                 crop.recycle()
             }
         }
 
+        diagnosticScans++
+        if (diagnosticScans % 30 == 0) {
+            Log.i(TAG, "CARD-ML-REJECTIONS: scans=$diagnosticScans reasons=$rejectionCounts " +
+                "recognizedSlots=not_accuracy; no_frames_saved")
+            rejectionCounts.clear()
+        }
         return result
     }
 
