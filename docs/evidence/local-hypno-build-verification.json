@@ -31,5 +31,7 @@
   "worker_tests": 13,
   "phone_match_verified": false,
   "shorts_visual_analysis": "blocked by fetch throttling and browser tunnel failure",
-  "environment": "managed Linux workspace; locally debug-signed APK"
+  "environment": "managed Linux workspace; locally debug-signed APK",
+  "native_verification_scope": "ARM64 architecture and library presence only; did not check ELF symbol versions",
+  "known_regression": "1.5.0 speech initialization fails: Sherpa requires OrtGetApiBase@VERS_1.17.1, packaged ORT exports VERS_1.20.0; see voice-native-1.5.1.json"
 }

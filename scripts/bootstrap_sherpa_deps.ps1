@@ -133,18 +133,18 @@ try {
 	  }
 
 	  $JniRequiredA = @(
-	    "jniLibs/arm64-v8a/libonnxruntime.so",
 	    "jniLibs/arm64-v8a/libsherpa-onnx-jni.so",
 	    "jniLibs/arm64-v8a/libsherpa-onnx-c-api.so",
 	    "jniLibs/arm64-v8a/libsherpa-onnx-cxx-api.so"
 	  )
 	  $JniRequiredB = @(
-	    "sherpa-onnx-v1.12.23-android/jniLibs/arm64-v8a/libonnxruntime.so",
 	    "sherpa-onnx-v1.12.23-android/jniLibs/arm64-v8a/libsherpa-onnx-jni.so",
 	    "sherpa-onnx-v1.12.23-android/jniLibs/arm64-v8a/libsherpa-onnx-c-api.so",
 	    "sherpa-onnx-v1.12.23-android/jniLibs/arm64-v8a/libsherpa-onnx-cxx-api.so"
 	  )
 
+      # The matching ONNX 1.17.1 AAR owns this library on both build platforms.
+      Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $JniDir "libonnxruntime.so")
 	  $NeedJni = $false
 	  foreach ($Rel in $JniRequiredA) {
 	    $OutPath = Join-Path $JniDir (Split-Path $Rel -Leaf)
@@ -181,7 +181,6 @@ try {
     (Join-Path $WhisperModelDir "tiny-encoder.int8.onnx"),
     (Join-Path $WhisperModelDir "tiny-decoder.int8.onnx"),
     (Join-Path $WhisperModelDir "tiny-tokens.txt"),
-    (Join-Path $JniDir "libonnxruntime.so"),
     (Join-Path $JniDir "libsherpa-onnx-jni.so"),
     (Join-Path $JniDir "libsherpa-onnx-c-api.so"),
     (Join-Path $JniDir "libsherpa-onnx-cxx-api.so") | Format-Table Name, Length

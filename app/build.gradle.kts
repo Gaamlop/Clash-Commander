@@ -12,8 +12,8 @@ android {
         applicationId = "com.yoyostudios.clashcompanion"
         minSdk = 28
         targetSdk = 35
-        versionCode = 10
-        versionName = "1.5.0-local-hypno"
+        versionCode = 11
+        versionName = "1.5.1-local-hypno"
 
         // Speech runtime is packaged for ARM64; do not advertise unsupported ABIs.
         ndk {
@@ -83,15 +83,16 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
     // Executes the same ONNX graph and Java API on Linux in the integration test.
-    testImplementation("com.microsoft.onnxruntime:onnxruntime:1.20.0")
+    testImplementation("com.microsoft.onnxruntime:onnxruntime:1.17.1")
 
     // Coil for image loading (card art from RoyaleAPI CDN)
     implementation("io.coil-kt:coil-compose:2.7.0")
 
     // PyTorch Mobile Lite for the bundled on-device card classifier.
     implementation("org.pytorch:pytorch_android_lite:2.1.0")
-    // One runtime supplies both the generic detector and Sherpa's backwards-compatible C API.
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
+    // Sherpa 1.12.23 links OrtGetApiBase@VERS_1.17.1. C API backwards compatibility
+    // does not satisfy that ELF symbol version: both JNI clients must use 1.17.1.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.1")
 
 
 }

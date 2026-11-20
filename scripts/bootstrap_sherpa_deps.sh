@@ -61,7 +61,8 @@ tar -xjf "$TMP/sherpa.tar.bz2" -C "$TMP/jni"
 
 # Only copy ARM64 binaries. A generic find by filename silently selected
 # x86_64 libraries and packaged them as arm64-v8a, crashing Voice Engine.
-# ONNX Runtime Android AAR supplies libonnxruntime.so (API 20, also supports Sherpa's API 17).
+# ONNX Runtime Android AAR 1.17.1 supplies libonnxruntime.so, matching Sherpa's
+# OrtGetApiBase@VERS_1.17.1 dependency. A newer C API alone is not ELF compatible.
 # Remove an ignored copy left by older bootstrap runs to avoid packaging the old runtime twice.
 rm -f "$JNI/libonnxruntime.so"
 for f in libsherpa-onnx-jni.so libsherpa-onnx-c-api.so libsherpa-onnx-cxx-api.so; do

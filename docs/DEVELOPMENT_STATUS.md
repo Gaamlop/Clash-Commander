@@ -179,3 +179,24 @@ Info exporta el conjunto posteriormente. No se exige Img entre jugadas.
 Los tres Shorts del usuario quedaron registrados, pendientes de observación:
 lectura web throttled, Chrome con ERR_TUNNEL_CONNECTION_FAILED y sin resultados
 indexados por ID. No se entrenó ni se afirmó observar esos clips.
+
+## Regresión de voz 1.5.0 → corrección 1.5.1
+
+El usuario confirmó que ninguno de los idiomas iniciaba. Se reprodujo el defecto
+sin credenciales inspeccionando el APK distribuido: Sherpa JNI y C API requieren
+`OrtGetApiBase@VERS_1.17.1`, mientras el runtime empaquetado sólo exporta
+`OrtGetApiBase@@VERS_1.20.0`. La API C admite clientes anteriores, pero el
+enlazador Android exige además la versión ELF exacta. La verificación previa
+de arquitectura ARM64 y la inferencia Java en Linux no cubrían este requisito.
+
+Se alinean el AAR Android y el runtime de pruebas Java a 1.17.1, manteniendo
+el detector ONNX opset17, ambos modelos de voz y las funciones existentes.
+Se corrige también el bootstrap PowerShell para evitar una segunda copia
+del runtime. La nueva comprobación del APK rechaza el 1.5.0 por los dos
+símbolos incompatibles; CI exige esa comprobación antes de publicar el APK.
+Verificación local 1.5.1: 156 pruebas JVM aprobadas, incluidos los seis grafos
+de voz y la inferencia de arena real con ONNX 1.17.1; 14 pruebas Python;
+lint sin errores (76 avisos). APK firmado, ARM64, cinco enlaces ONNX
+versionados compatibles y archivos de ambos idiomas presentes.
+Resultado y límites en evidence/voice-native-1.5.1.json. El arranque real de voz
+y el reconocimiento en el Nothing Phone siguen pendientes de prueba en el dispositivo.

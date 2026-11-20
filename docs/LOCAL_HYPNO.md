@@ -35,7 +35,7 @@ El detector procede de sacha9214/clash-ai `093604e`, convertido a ONNX opset17, 
 
 El exportador verifica el checkpoint por SHA-256, contrato de dimensiones y paridad PyTorch/ONNX sobre dos entradas sintéticas y una imagen real. El máximo error absoluto del tensor fue inferior a 0,002. El APK comprueba el hash del modelo antes de cargarlo.
 
-La prueba JVM de integración usa la API Java y el runtime nativo ONNX 1.20 de Linux: imagen real → el mismo preprocesador Kotlin de Android → modelo real → decoder → política. Comprueba rey y Cannon propios y una decisión legal. El APK repite la parte de percepción como autoprueba en Android. La imagen pública de KataCR puede solaparse con datos de entrenamiento del detector: esta prueba mide integración/compatibilidad, **no precisión independiente**.
+La prueba JVM de integración usa la API Java y el runtime nativo ONNX 1.17.1 de Linux: imagen real → el mismo preprocesador Kotlin de Android → modelo real → decoder → política. Comprueba rey y Cannon propios y una decisión legal. Otra prueba abre los seis grafos de voz (Whisper, Zipformer y VAD) con ese mismo runtime CPU, para detectar operadores incompatibles; no equivale a probar reconocimiento de audio ni el JNI de Sherpa en Android. El APK repite la parte de percepción como autoprueba en Android. La imagen pública de KataCR puede solaparse con datos de entrenamiento del detector: esta prueba mide integración/compatibilidad, **no precisión independiente**.
 
 Las pruebas de retratos incluyen 12 ilustraciones de las ocho cartas, variantes normales/evo/héroe, redimensionado, atenuación, grises y cartas ajenas. Son regresiones de transformaciones; no acreditan cuatro cartas correctas en cada fotograma real. Los escenarios de combate y el ciclo de tres jugadas con rotación/gasto son simulaciones explícitas, no victorias en una partida.
 
@@ -46,11 +46,12 @@ python scripts/local_engine/export_arena.py
 python scripts/local_engine/verify_bundle.py
 ./scripts/bootstrap_sherpa_deps.sh
 ./gradlew testDebugUnitTest lintDebug assembleDebug
+python scripts/check_apk_native.py app/build/outputs/apk/debug/app-debug.apk
 python -m unittest discover -s scripts -p 'test_*.py'
 node backend/worker.test.mjs
 ```
 
-CI reutiliza únicamente el detector convertido con clave por fuente/script; verifica siempre su hash y ejecuta las pruebas nativas. No incluye credenciales. ONNX Runtime Android 1.20 aporta el runtime compartido para el detector y la API C17 que usa Sherpa; el bootstrap elimina su antigua copia duplicada.
+CI reutiliza únicamente el detector convertido con clave por fuente/script; verifica siempre su hash y ejecuta las pruebas nativas. No incluye credenciales. ONNX Runtime Android 1.17.1 aporta el runtime compartido para ambos clientes JNI; el bootstrap elimina la copia duplicada tanto en Linux como en Windows. Tras compilar se comprueban las versiones de símbolos ELF del APK, las bibliotecas ARM64 y los archivos de ambos idiomas. La compatibilidad de la API C no basta: Sherpa exige exactamente `OrtGetApiBase@VERS_1.17.1`. La 1.5.0 usaba el símbolo 1.20.0 y fallaba en el enlazador Android; la prueba JVM de Linux no detectaba ese conflicto. Ver [corrección 1.5.1](evidence/voice-native-1.5.1.json).
 
 ## Diagnóstico automático
 
