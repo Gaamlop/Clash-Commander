@@ -12,8 +12,13 @@ android {
         applicationId = "com.yoyostudios.clashcompanion"
         minSdk = 28
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.4"
+        versionCode = 9
+        versionName = "1.4.4-experimental"
+
+        // Speech runtime is packaged for ARM64; do not advertise unsupported ABIs.
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
 
         // No third-party API key may be embedded in an APK.
         buildConfigField("String", "ANTHROPIC_API_KEY", "\"\"")
@@ -74,6 +79,8 @@ dependencies {
     // Coil for image loading (card art from RoyaleAPI CDN)
     implementation("io.coil-kt:coil-compose:2.7.0")
 
-    // PyTorch Mobile Lite for on-device card classification (140KB ResNet)
+    // PyTorch Mobile Lite for the bundled on-device card classifier.
     implementation("org.pytorch:pytorch_android_lite:2.1.0")
+
+
 }

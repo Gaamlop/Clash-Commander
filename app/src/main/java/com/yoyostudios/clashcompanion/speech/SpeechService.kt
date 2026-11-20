@@ -17,186 +17,165 @@ import android.os.Looper
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import com.k2fsa.sherpa.onnx.*
+import com.yoyostudios.clashcompanion.deck.DeckManager
+import java.io.File
+import java.util.Locale
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
 
+/** Offline Spanish Whisper and English Zipformer command recognition. */
 class SpeechService : Service() {
-
     companion object {
         private const val TAG = "ClashCompanion"
         private const val CHANNEL_ID = "clash_companion_speech"
         private const val NOTIFICATION_ID = 1002
         private const val SAMPLE_RATE = 16000
-        private const val SILENCE_PADDING_SAMPLES = 4800 // 300ms at 16kHz
+        private const val SILENCE_PADDING_SAMPLES = 4800
+        // A new directory avoids trusting partially extracted files from older builds.
+        private const val MODEL_ROOT = "speech_models_v2"
+        private const val ENGLISH_MODEL = "sherpa-onnx-zipformer-en-2023-04-01"
+        private const val SPANISH_MODEL = "sherpa-onnx-whisper-tiny"
 
+        @Volatile
         var instance: SpeechService? = null
             private set
     }
 
     private val handler = Handler(Looper.getMainLooper())
-
+    // Configuration and recorder lifecycle are serialized off the Android main thread.
+    private val control = Executors.newSingleThreadExecutor { task ->
+        Thread(task, "STT-Control").apply { isDaemon = true }
+    }
+    private val nativeLock = Any()
     private var vad: Vad? = null
     private var offlineRecognizer: OfflineRecognizer? = null
     private var audioRecord: AudioRecord? = null
     private var recordingThread: Thread? = null
+    @Volatile private var loadedLanguage: String? = null
+
+    @Volatile private var destroyed = false
+    @Volatile private var isListening = false
+    @Volatile private var listeningRequested = false
+    @Volatile private var isModelLoaded = false
+    @Volatile private var selectedLanguage = "es"
+    private val listeningSession = AtomicLong(0L)
 
     @Volatile
-    private var isListening = false
-    private var isModelLoaded = false
-    @Volatile
-    private var isReloadingHotwords = false
+    var loadError: String? = null
+        private set
 
-    // Callback for transcript results - set by OverlayManager
+    /** Only actual recognized speech is sent here; service status is never parsed as a command. */
     var onTranscript: ((text: String, latencyMs: Long) -> Unit)? = null
+    var onReadyStateChanged: ((ready: Boolean, error: String?) -> Unit)? = null
 
-    fun isReady(): Boolean = isModelLoaded
+    fun isReady(): Boolean = isModelLoaded && loadedLanguage == selectedLanguage && !destroyed
+    fun getLanguage(): String = selectedLanguage
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
+        selectedLanguage = SpeechLanguage.get(this)
         instance = this
-        Log.i(TAG, "STT: SpeechService created")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
-        Log.i(TAG, "STT: Foreground service started")
-
-        // Load models in background
-        thread {
-            loadModels()
-        }
-
+        enqueue { configureRecognizer() }
         return START_NOT_STICKY
     }
 
-    private fun loadModels() {
-        try {
-            val startTime = System.currentTimeMillis()
-            Log.i(TAG, "STT: Model loading started...")
+    /** Language changes retain the transcript callback and resume requested listening. */
+    fun setLanguage(language: String) {
+        val normalized = SpeechLanguage.normalize(language)
+        SpeechLanguage.set(this, normalized)
+        if (selectedLanguage != normalized) {
+            selectedLanguage = normalized
+            isModelLoaded = false
+            loadError = null
+            // Prevent an old-language transcript already in flight from becoming a command.
+            listeningSession.incrementAndGet()
+            isListening = false
+            notifyReadyState()
+        }
+        enqueue { configureRecognizer() }
+    }
 
-            // Extract model files from APK assets to filesystem (one-time).
-            // sherpa-onnx cannot mix asset paths and filesystem paths in the same
-            // recognizer config — all paths must be filesystem when using deck
-            // hotwords (written by DeckManager to filesDir). So we extract once
-            // and always use filesystem paths with assetManager = null.
-            extractModelFiles(application)
-
-            val filesDir = application.filesDir.absolutePath
-
-            // Initialize VAD (filesystem path, no assetManager)
-            Log.i(TAG, "STT: Initializing Silero VAD...")
-            val vadConfig = VadModelConfig(
-                sileroVadModelConfig = SileroVadModelConfig(
-                    model = "$filesDir/silero_vad.onnx",
-                    minSilenceDuration = 0.25f,
-                    minSpeechDuration = 0.25f,
-                    threshold = 0.5f,
-                    windowSize = 512,
-                ),
-                sampleRate = SAMPLE_RATE,
-            )
-            vad = Vad(config = vadConfig)
-            Log.i(TAG, "STT: Silero VAD initialized")
-
-            // Initialize Zipformer Transducer with hotword biasing
-            // Use deck-boosted hotwords if available (written by DeckManager),
-            // otherwise fall back to default hotwords from assets.
-            val deckHotwords = java.io.File(application.filesDir,
-                com.yoyostudios.clashcompanion.deck.DeckManager.DECK_HOTWORDS_FILE)
-            val hotwordsPath = if (deckHotwords.exists()) {
-                Log.i(TAG, "STT: Using deck-boosted hotwords from ${deckHotwords.absolutePath}")
-                deckHotwords.absolutePath
-            } else {
-                Log.i(TAG, "STT: Using default hotwords (no deck loaded yet)")
-                "$filesDir/hotwords.txt"
-            }
-
-            Log.i(TAG, "STT: Initializing Zipformer Transducer int8 with hotwords...")
-            val modelDir = "$filesDir/sherpa-onnx-zipformer-en-2023-04-01"
-            val recognizerConfig = OfflineRecognizerConfig(
-                featConfig = FeatureConfig(sampleRate = SAMPLE_RATE, featureDim = 80),
-                modelConfig = OfflineModelConfig(
-                    transducer = OfflineTransducerModelConfig(
-                        encoder = "$modelDir/encoder-epoch-99-avg-1.int8.onnx",
-                        decoder = "$modelDir/decoder-epoch-99-avg-1.int8.onnx",
-                        joiner = "$modelDir/joiner-epoch-99-avg-1.int8.onnx",
-                    ),
-                    tokens = "$modelDir/tokens.txt",
-                    numThreads = 2,
-                    debug = false,
-                    provider = "cpu",
-                    modelingUnit = "bpe",
-                    bpeVocab = "$modelDir/bpe.vocab",
-                ),
-                decodingMethod = "modified_beam_search",
-                maxActivePaths = 4,
-                hotwordsFile = hotwordsPath,
-                hotwordsScore = 2.0f,
-            )
-            offlineRecognizer = OfflineRecognizer(config = recognizerConfig)
-
-            val elapsed = System.currentTimeMillis() - startTime
-            Log.i(TAG, "STT: Model loaded in ${elapsed}ms")
-            isModelLoaded = true
-
-            handler.post {
-                onTranscript?.invoke("[Models loaded in ${elapsed}ms]", elapsed)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "STT: Model load failed: ${e.message}", e)
-            handler.post {
-                onTranscript?.invoke("[ERROR: Model load failed: ${e.message}]", 0)
-            }
+    /** English hotwords belong to its transducer; Whisper uses its multilingual tokenizer. */
+    fun reloadHotwords() {
+        enqueue {
+            if (selectedLanguage == "en") configureRecognizer(force = true)
         }
     }
 
-    /**
-     * Reload deck hotwords at runtime (after the user shares a new deck).
-     *
-     * sherpa-onnx hotwords are baked into the recognizer config, so we rebuild the
-     * OfflineRecognizer with the new hotwords file. This is fast enough for deck changes
-     * and avoids requiring a full app restart.
-     */
-    fun reloadHotwords() {
-        if (!isModelLoaded) {
-            Log.w(TAG, "STT: reloadHotwords ignored — models not loaded yet")
-            return
+    private fun enqueue(action: () -> Unit) {
+        if (destroyed) return
+        try {
+            control.execute { if (!destroyed) action() }
+        } catch (_: RejectedExecutionException) {
+            // A UI callback can arrive while Android is destroying this service.
         }
-        if (isReloadingHotwords) {
-            Log.w(TAG, "STT: reloadHotwords ignored — reload already in progress")
-            return
+    }
+
+    private fun notifyReadyState() {
+        handler.post {
+            if (!destroyed) onReadyStateChanged?.invoke(isReady(), loadError)
         }
+    }
 
-        thread(name = "STT-ReloadHotwords") {
-            isReloadingHotwords = true
-            val wasListening = isListening
-            try {
-                Log.i(TAG, "STT: Reloading hotwords (wasListening=$wasListening)...")
+    private fun configureRecognizer(force: Boolean = false) {
+        if (destroyed) return
+        val language = selectedLanguage
+        if (!force && isModelLoaded && loadedLanguage == language) return
+        stopListeningInternal()
+        isModelLoaded = false
+        loadError = null
+        notifyReadyState()
 
-                if (wasListening) {
-                    stopListening()
-                }
-
-                val filesDir = application.filesDir.absolutePath
-
-                val deckHotwords = java.io.File(
-                    application.filesDir,
-                    com.yoyostudios.clashcompanion.deck.DeckManager.DECK_HOTWORDS_FILE
+        var replacement: OfflineRecognizer? = null
+        var replacementVad: Vad? = null
+        try {
+            val startedAt = android.os.SystemClock.elapsedRealtime()
+            val modelRoot = File(filesDir, MODEL_ROOT)
+            extractAssetAtomically("silero_vad.onnx", modelRoot)
+            extractAssetAtomically("hotwords.txt", modelRoot)
+            val config = if (language == "es") {
+                val files = listOf("tiny-encoder.int8.onnx", "tiny-decoder.int8.onnx", "tiny-tokens.txt")
+                files.forEach { extractAssetAtomically("$SPANISH_MODEL/$it", modelRoot) }
+                val modelDir = File(modelRoot, SPANISH_MODEL).absolutePath
+                OfflineRecognizerConfig(
+                    featConfig = FeatureConfig(sampleRate = SAMPLE_RATE, featureDim = 80),
+                    modelConfig = OfflineModelConfig(
+                        whisper = OfflineWhisperModelConfig(
+                            encoder = "$modelDir/tiny-encoder.int8.onnx",
+                            decoder = "$modelDir/tiny-decoder.int8.onnx",
+                            language = "es",
+                            task = "transcribe",
+                        ),
+                        tokens = "$modelDir/tiny-tokens.txt",
+                        numThreads = 2,
+                        provider = "cpu",
+                        debug = false,
+                    ),
+                    decodingMethod = "greedy_search",
                 )
-                val hotwordsPath = if (deckHotwords.exists()) {
+            } else {
+                val files = listOf(
+                    "encoder-epoch-99-avg-1.int8.onnx", "decoder-epoch-99-avg-1.int8.onnx",
+                    "joiner-epoch-99-avg-1.int8.onnx", "tokens.txt", "bpe.vocab",
+                )
+                files.forEach { extractAssetAtomically("$ENGLISH_MODEL/$it", modelRoot) }
+                val modelDir = File(modelRoot, ENGLISH_MODEL).absolutePath
+                val deckHotwords = File(filesDir, DeckManager.DECK_HOTWORDS_FILE)
+                val hotwords = if (deckHotwords.isFile && deckHotwords.length() > 0) {
                     deckHotwords.absolutePath
                 } else {
-                    "$filesDir/hotwords.txt"
+                    File(modelRoot, "hotwords.txt").absolutePath
                 }
-
-                // Rebuild recognizer with new hotwords. Keep the old recognizer alive until
-                // the new one is successfully created to avoid breaking STT on failure.
-                val oldRecognizer = offlineRecognizer
-
-                val modelDir = "$filesDir/sherpa-onnx-zipformer-en-2023-04-01"
-                val recognizerConfig = OfflineRecognizerConfig(
+                OfflineRecognizerConfig(
                     featConfig = FeatureConfig(sampleRate = SAMPLE_RATE, featureDim = 80),
                     modelConfig = OfflineModelConfig(
                         transducer = OfflineTransducerModelConfig(
@@ -213,234 +192,234 @@ class SpeechService : Service() {
                     ),
                     decodingMethod = "modified_beam_search",
                     maxActivePaths = 4,
-                    hotwordsFile = hotwordsPath,
+                    hotwordsFile = hotwords,
                     hotwordsScore = 2.0f,
                 )
-                val newRecognizer = OfflineRecognizer(config = recognizerConfig)
-                offlineRecognizer = newRecognizer
-                oldRecognizer?.release()
-
-                Log.i(TAG, "STT: Hotwords reloaded from $hotwordsPath")
-                handler.post {
-                    onTranscript?.invoke("[Hotwords updated]", 0)
-                }
-
-                if (wasListening) {
-                    startListening()
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "STT: Hotwords reload failed: ${e.message}", e)
-                handler.post {
-                    onTranscript?.invoke("[ERROR: Hotwords reload failed: ${e.message}]", 0)
-                }
-                if (wasListening) {
-                    // Best-effort: resume listening using the previous recognizer.
-                    startListening()
-                }
-            } finally {
-                isReloadingHotwords = false
             }
+            replacement = OfflineRecognizer(config = config)
+            if (vad == null) {
+                replacementVad = Vad(config = VadModelConfig(
+                    sileroVadModelConfig = SileroVadModelConfig(
+                        model = File(modelRoot, "silero_vad.onnx").absolutePath,
+                        minSilenceDuration = 0.25f,
+                        minSpeechDuration = 0.25f,
+                        threshold = 0.5f,
+                        windowSize = 512,
+                    ),
+                    sampleRate = SAMPLE_RATE,
+                ))
+            }
+            if (destroyed || selectedLanguage != language) return
+            synchronized(nativeLock) {
+                offlineRecognizer?.release()
+                offlineRecognizer = replacement
+                replacement = null
+                replacementVad?.let { vad = it; replacementVad = null }
+            }
+            loadedLanguage = language
+            isModelLoaded = true
+            loadError = null
+            Log.i(TAG, "STT: Offline $language model ready in ${android.os.SystemClock.elapsedRealtime() - startedAt}ms")
+            notifyReadyState()
+            if (listeningRequested) startListeningInternal()
+        } catch (error: Exception) {
+            reportLoadFailure(error)
+        } catch (error: LinkageError) {
+            reportLoadFailure(error)
+        } finally {
+            replacement?.release()
+            replacementVad?.release()
         }
     }
 
-    /**
-     * Extract sherpa-onnx model files from APK assets to filesDir (one-time).
-     * Skips extraction if the encoder file already exists on disk.
-     */
-    private fun extractModelFiles(context: Context) {
-        val modelSubdir = "sherpa-onnx-zipformer-en-2023-04-01"
-        val encoderFile = java.io.File(context.filesDir, "$modelSubdir/encoder-epoch-99-avg-1.int8.onnx")
-        if (encoderFile.exists()) {
-            Log.i(TAG, "STT: Model files already extracted, skipping")
-            return
-        }
+    private fun reportLoadFailure(error: Throwable) {
+        isModelLoaded = false
+        loadError = "No se pudo iniciar la voz ${if (selectedLanguage == "es") "en español" else "en inglés"}. Reintenta Voice Engine."
+        Log.e(TAG, "STT: Offline model unavailable (${error.javaClass.simpleName})")
+        notifyReadyState()
+    }
 
-        Log.i(TAG, "STT: Extracting model files from assets (one-time)...")
-        val extractStart = System.currentTimeMillis()
-
-        // Create model subdirectory
-        java.io.File(context.filesDir, modelSubdir).mkdirs()
-
-        val assetFiles = listOf(
-            "silero_vad.onnx",
-            "hotwords.txt",
-            "$modelSubdir/encoder-epoch-99-avg-1.int8.onnx",
-            "$modelSubdir/decoder-epoch-99-avg-1.int8.onnx",
-            "$modelSubdir/joiner-epoch-99-avg-1.int8.onnx",
-            "$modelSubdir/tokens.txt",
-            "$modelSubdir/bpe.vocab",
-        )
-
-        for (assetPath in assetFiles) {
-            val outFile = java.io.File(context.filesDir, assetPath)
-            context.assets.open(assetPath).use { input ->
-                outFile.outputStream().use { output ->
+    /** A failed copy never leaves a destination that a subsequent attempt trusts. */
+    private fun extractAssetAtomically(assetPath: String, destinationRoot: File) {
+        val destination = File(destinationRoot, assetPath)
+        if (destination.isFile && destination.length() > 0) return
+        check(destination.parentFile?.mkdirs() == true || destination.parentFile?.isDirectory == true)
+        val temporary = File.createTempFile(destination.name, ".part", destination.parentFile)
+        try {
+            assets.open(assetPath).use { input ->
+                temporary.outputStream().use { output ->
                     input.copyTo(output)
+                    output.fd.sync()
                 }
             }
-            Log.i(TAG, "STT: Extracted $assetPath (${outFile.length() / 1024}KB)")
+            check(temporary.length() > 0) { "Empty speech model asset" }
+            check(temporary.renameTo(destination)) { "Cannot install speech model asset" }
+        } finally {
+            temporary.delete()
         }
-
-        val elapsed = System.currentTimeMillis() - extractStart
-        Log.i(TAG, "STT: Model extraction complete in ${elapsed}ms")
     }
 
     fun startListening() {
-        if (isListening) {
-            Log.w(TAG, "STT: Already listening")
-            return
-        }
-        if (!isModelLoaded) {
-            Log.w(TAG, "STT: Models not loaded yet")
-            handler.post {
-                onTranscript?.invoke("[Models still loading...]", 0)
-            }
-            return
-        }
+        listeningRequested = true
+        enqueue { startListeningInternal() }
+    }
 
+    private fun startListeningInternal() {
+        if (destroyed || !listeningRequested || isListening || !isReady()) return
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            Log.e(TAG, "STT: RECORD_AUDIO permission not granted")
+            loadError = "Permite el micrófono para dar órdenes de voz."
+            notifyReadyState()
             return
         }
-
         val bufferSize = AudioRecord.getMinBufferSize(
-            SAMPLE_RATE,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT
+            SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT
         )
-        Log.i(TAG, "STT: AudioRecord buffer size: $bufferSize bytes (${bufferSize * 1000 / SAMPLE_RATE / 2}ms)")
-
-        audioRecord = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
-            SAMPLE_RATE,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-            bufferSize * 2
-        )
-
-        if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-            Log.e(TAG, "STT: AudioRecord init failed, state=${audioRecord?.state}")
+        if (bufferSize <= 0) {
+            loadError = "El micrófono no admite la captura de voz."
+            notifyReadyState()
             return
         }
-
-        Log.i(TAG, "STT: AudioRecord initialized, sampleRate=$SAMPLE_RATE")
-        audioRecord?.startRecording()
-        isListening = true
-        vad?.reset()
-
-        recordingThread = thread(name = "STT-Recording") {
-            processAudio()
+        try {
+            if (audioRecord != null) stopListeningInternal()
+            if (!listeningRequested || destroyed) return
+            val recorder = AudioRecord(
+                MediaRecorder.AudioSource.MIC, SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT, bufferSize * 2,
+            )
+            if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+                recorder.release()
+                throw IllegalStateException("AudioRecord not initialized")
+            }
+            audioRecord = recorder
+            synchronized(nativeLock) { vad?.reset() }
+            recorder.startRecording()
+            val session = listeningSession.incrementAndGet()
+            isListening = true
+            loadError = null
+            notifyReadyState()
+            recordingThread = thread(name = "STT-Recording", isDaemon = true) {
+                processAudio(recorder, session)
+            }
+        } catch (error: Exception) {
+            audioRecord?.release()
+            audioRecord = null
+            isListening = false
+            loadError = "No se pudo abrir el micrófono. Reintenta escuchar."
+            notifyReadyState()
+            Log.e(TAG, "STT: Microphone unavailable (${error.javaClass.simpleName})")
         }
-        Log.i(TAG, "STT: Listening started")
     }
 
     fun stopListening() {
-        if (!isListening) return
+        listeningRequested = false
         isListening = false
-        // Wait for recording thread to finish before releasing AudioRecord
-        try {
-            recordingThread?.join(1000) // wait up to 1 second
-        } catch (e: InterruptedException) {
-            Log.w(TAG, "STT: Recording thread join interrupted")
-        }
-        recordingThread = null
-        try {
-            audioRecord?.stop()
-            audioRecord?.release()
-        } catch (e: Exception) {
-            Log.w(TAG, "STT: Error releasing AudioRecord: ${e.message}")
-        }
-        audioRecord = null
-        Log.i(TAG, "STT: Listening stopped")
+        listeningSession.incrementAndGet()
+        enqueue { stopListeningInternal() }
     }
 
-    private fun processAudio() {
-        val chunkSize = 512 // samples per chunk
-        val buffer = ShortArray(chunkSize)
+    private fun stopListeningInternal() {
+        isListening = false
+        listeningSession.incrementAndGet()
+        // Stop first to unblock AudioRecord.read; native objects remain alive until decode exits.
+        try { audioRecord?.stop() } catch (_: Exception) {}
+        val previousThread = recordingThread
+        if (previousThread != null && previousThread !== Thread.currentThread()) {
+            var interrupted = false
+            while (previousThread.isAlive) {
+                try { previousThread.join() } catch (_: InterruptedException) { interrupted = true }
+            }
+            if (interrupted) Thread.currentThread().interrupt()
+        }
+        recordingThread = null
+        try { audioRecord?.release() } catch (_: Exception) {}
+        audioRecord = null
+    }
 
+    private fun isCurrentSession(session: Long): Boolean =
+        !destroyed && listeningRequested && isListening && listeningSession.get() == session
+
+    private fun processAudio(recorder: AudioRecord, session: Long) {
+        val buffer = ShortArray(512)
         try {
-            while (isListening) {
-                val ret = audioRecord?.read(buffer, 0, buffer.size) ?: break
-                if (ret <= 0) continue
-
-                val samples = FloatArray(ret) { buffer[it] / 32768.0f }
-                vad?.acceptWaveform(samples)
-
-                while (vad?.empty() == false && isListening) {
-                    val segment = vad?.front() ?: break
-                    val segmentSamples = segment.samples
-
-                    Log.i(TAG, "STT: VAD detected speech, ${segmentSamples.size} samples (${segmentSamples.size * 1000 / SAMPLE_RATE}ms)")
-
-                    // Pad with 300ms silence before and after (encoder needs silence context)
-                    val padded = FloatArray(SILENCE_PADDING_SAMPLES + segmentSamples.size + SILENCE_PADDING_SAMPLES)
-                    System.arraycopy(segmentSamples, 0, padded, SILENCE_PADDING_SAMPLES, segmentSamples.size)
-
-                    // Run transcription
-                    val transcribeStart = System.currentTimeMillis()
-                    try {
-                        val stream = offlineRecognizer?.createStream() ?: break
-                        stream.acceptWaveform(padded, SAMPLE_RATE)
-                        offlineRecognizer?.decode(stream)
-                        val result = offlineRecognizer?.getResult(stream)
-                        stream.release()
-
-                        val text = result?.text?.trim()?.lowercase() ?: ""
-                        val elapsed = System.currentTimeMillis() - transcribeStart
-
-                        if (text.isNotBlank()) {
-                            Log.i(TAG, "STT: Transcription result: '$text' in ${elapsed}ms")
-                            handler.post {
-                                onTranscript?.invoke(text, elapsed)
-                            }
-                        } else {
-                            Log.w(TAG, "STT: Empty transcription from ${segmentSamples.size}-sample segment (${elapsed}ms)")
+            while (isCurrentSession(session)) {
+                val count = recorder.read(buffer, 0, buffer.size)
+                if (count < 0) throw IllegalStateException("AudioRecord read failed")
+                if (count == 0) continue
+                val samples = FloatArray(count) { buffer[it] / 32768.0f }
+                synchronized(nativeLock) { if (isCurrentSession(session)) vad?.acceptWaveform(samples) }
+                while (isCurrentSession(session)) {
+                    val segment = synchronized(nativeLock) {
+                        if (vad?.empty() == false) vad?.front() else null
+                    } ?: break
+                    val startedAt = android.os.SystemClock.elapsedRealtime()
+                    val text = synchronized(nativeLock) {
+                        if (!isCurrentSession(session)) return@synchronized ""
+                        val recognizer = offlineRecognizer ?: return@synchronized ""
+                        val padded = FloatArray(SILENCE_PADDING_SAMPLES + segment.samples.size + SILENCE_PADDING_SAMPLES)
+                        System.arraycopy(segment.samples, 0, padded, SILENCE_PADDING_SAMPLES, segment.samples.size)
+                        val stream = recognizer.createStream()
+                        try {
+                            stream.acceptWaveform(padded, SAMPLE_RATE)
+                            recognizer.decode(stream)
+                            recognizer.getResult(stream).text.trim().lowercase(Locale.ROOT)
+                        } finally {
+                            stream.release()
+                            vad?.pop()
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "STT: Transcription error: ${e.message}", e)
                     }
-
-                    vad?.pop()
+                    if (text.isNotBlank() && isCurrentSession(session)) {
+                        val elapsed = android.os.SystemClock.elapsedRealtime() - startedAt
+                        handler.post {
+                            if (isCurrentSession(session)) onTranscript?.invoke(text, elapsed)
+                        }
+                    }
                 }
             }
-        } catch (e: Exception) {
-            if (isListening) {
-                Log.e(TAG, "STT: Audio processing error: ${e.message}", e)
+        } catch (error: Exception) {
+            if (isCurrentSession(session)) {
+                isListening = false
+                loadError = "La escucha se interrumpió. Pulsa escuchar para reintentar."
+                notifyReadyState()
+                Log.e(TAG, "STT: Audio processing stopped (${error.javaClass.simpleName})")
             }
-            // If not listening, this is expected during shutdown
         }
-        Log.i(TAG, "STT: processAudio thread exiting")
     }
 
     private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Voice Recognition",
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            description = "Clash Companion voice command recognition"
-        }
-        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.createNotificationChannel(channel)
+        getSystemService(NotificationManager::class.java).createNotificationChannel(
+            NotificationChannel(CHANNEL_ID, "Voice Recognition", NotificationManager.IMPORTANCE_LOW)
+                .apply { description = "Reconocimiento de órdenes sin conexión" }
+        )
     }
 
-    private fun buildNotification(): Notification {
-        return Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("Clash Companion")
-            .setContentText("Voice recognition active")
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setOngoing(true)
-            .build()
-    }
+    private fun buildNotification(): Notification = Notification.Builder(this, CHANNEL_ID)
+        .setContentTitle("Clash Commander")
+        .setContentText("Órdenes de voz sin conexión")
+        .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+        .setOngoing(true)
+        .build()
 
     override fun onDestroy() {
-        super.onDestroy()
-        stopListening()
-        offlineRecognizer?.release()
-        vad?.release()
+        destroyed = true
+        isModelLoaded = false
+        listeningRequested = false
+        isListening = false
+        listeningSession.incrementAndGet()
         instance = null
-        Log.i(TAG, "STT: SpeechService destroyed")
+        handler.removeCallbacksAndMessages(null)
+        // The control executor waits for any native decode before releasing its model.
+        control.execute {
+            stopListeningInternal()
+            synchronized(nativeLock) {
+                offlineRecognizer?.release()
+                offlineRecognizer = null
+                vad?.release()
+                vad = null
+            }
+        }
+        control.shutdown()
+        super.onDestroy()
     }
 }
