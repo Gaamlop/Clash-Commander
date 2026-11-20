@@ -29,6 +29,9 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Test offline hand-slot benchmark
+        run: python3 -m unittest discover -s scripts -p 'test_hand_slot_benchmark.py'
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
