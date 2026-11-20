@@ -9,8 +9,12 @@ data class HandRecognitionState(
     val frameId: Long = -1L,
     val captureSessionId: Long = -1L,
     val capturedAtElapsedRealtime: Long = -1L,
-    val matchSessionId: Long = 0L
+    val matchSessionId: Long = 0L,
+    val observedElixir: Int? = null
 ) {
+    fun verifiedElixir(nowElapsedRealtime: Long, activeCaptureSessionId: Long?, maxAgeMs: Long): Int? =
+        observedElixir?.takeIf { it in 0..10 && verifiedHand(nowElapsedRealtime, activeCaptureSessionId, maxAgeMs).isNotEmpty() }
+
     fun verifiedHand(nowElapsedRealtime: Long, activeCaptureSessionId: Long?, maxAgeMs: Long): Map<Int, String> =
         if (captureSessionId == activeCaptureSessionId &&
             CaptureFreshness.isFresh(capturedAtElapsedRealtime, nowElapsedRealtime, maxAgeMs)

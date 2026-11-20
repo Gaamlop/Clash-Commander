@@ -23,7 +23,9 @@ internal suspend fun Call.awaitResponseBody(): String = suspendCancellableCorout
             }
             try {
                 val body = response.use {
-                    if (!it.isSuccessful) throw GeminiHttpException(it.code)
+                    if (!it.isSuccessful) throw GeminiHttpException(
+                        it.code, ProviderBackoff.parseRetryAfter(it.header("Retry-After"))
+                    )
                     it.body?.string().orEmpty()
                 }
                 if (continuation.isActive) continuation.resume(body)
@@ -35,4 +37,4 @@ internal suspend fun Call.awaitResponseBody(): String = suspendCancellableCorout
 }
 
 /** Provider response bodies can contain sensitive diagnostics; expose only the status code. */
-class GeminiHttpException(val statusCode: Int) : IOException("Gemini: HTTP $statusCode")
+class GeminiHttpException(val statusCode: Int, val retryAfterMs: Long? = null) : IOException("Gemini: HTTP $statusCode")

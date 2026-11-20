@@ -330,6 +330,10 @@ object CommandRouter {
             overlay?.updateStatus("IA: Comparte el mazo actual de 8 cartas desde el juego")
             return null
         }
+        if (GeminiClient.cooldownRemainingMs > 0) {
+            showProviderCooldown(if (autonomous) "AUTO" else "SMART")
+            return null
+        }
         if (isGestureInFlight || !HandDetector.hasReliableHand(2)) {
             overlay?.updateStatus("AUTO: Reintentando reconocimiento de mano (minimo 2 cartas)")
             return null
@@ -435,6 +439,10 @@ object CommandRouter {
                 throw error
             } catch (error: Exception) {
                 if (context.revision == decisionRevision) {
+                    if (GeminiClient.cooldownRemainingMs > 0) {
+                        showProviderCooldown(label)
+                        return@launch
+                    }
                     val cause = if (error is com.yoyostudios.clashcompanion.api.GeminiHttpException)
                         "Gemini HTTP ${error.statusCode}" else "respuesta no valida (${error.javaClass.simpleName})"
                     overlay?.updateStatus("$label: $cause; reintentando")
@@ -453,6 +461,11 @@ object CommandRouter {
         return job
     }
 
+    private fun showProviderCooldown(label: String) {
+        val seconds = (GeminiClient.cooldownRemainingMs + 999) / 1_000
+        overlay?.updateStatus("$label: Gemini limitado (429); pausa ${seconds}s. Sin jugadas IA")
+    }
+
     /**
      * Build the Gemini system prompt with deck, playbook, hand state, arena, and last played context.
      */
@@ -465,6 +478,10 @@ object CommandRouter {
 
         val hand = HandDetector.currentVerifiedHand
         val handCards = (0..3).mapNotNull { hand[it] }.joinToString(", ")
+        val ownElixir = HandDetector.ownElixir
+        val elixirSection = if (ownElixir != null) {
+            "LOCAL OWN ELIXIR: $ownElixir / 10 (experimental conservative bar estimate; verify HUD)."
+        } else "LOCAL OWN ELIXIR: UNKNOWN; read the HUD and never invent a value."
         val handSection = if (handCards.isNotBlank()) {
             "CURRENT HAND (visually identified; affordability UNKNOWN): $handCards"
         } else {
@@ -486,6 +503,7 @@ DECK: $deckJson
 ${DeckManager.tacticalContext()}
 $playbookSection
 $handSection
+$elixirSection
 $arenaSection$lastPlayedSection
 ${ArchetypePolicy.guidance(deckCards.toSet())}
 ELIXIR SENSOR: Not available. Card costs are metadata, not available elixir.
@@ -923,6 +941,14 @@ Or when waiting is safer: {"action":"wait","observed_elixir":null,"reasoning":"<
         // Do not tap stale card slots while recording an unrelated app.
         if (!HandDetector.hasReliableHand(1)) {
             overlay?.updateStatus("No veo la mano. Pulsa Img para guardar diagnostico")
+            isBusy = false
+            return
+        }
+
+        val availableElixir = HandDetector.ownElixir
+        val cost = DeckManager.currentDeck.firstOrNull { it.name == card }?.elixir
+        if (ElixirPlayGate.blocks(availableElixir, cost)) {
+            overlay?.updateStatus("Sin elixir para $card ($availableElixir/$cost); esperando")
             isBusy = false
             return
         }

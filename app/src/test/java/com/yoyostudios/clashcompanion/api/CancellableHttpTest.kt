@@ -29,8 +29,9 @@ class CancellableHttpTest {
         override fun isCanceled() = cancelled
         override fun timeout() = Timeout()
         override fun clone(): Call = FakeCall()
-        fun respond(code: Int, body: String) = callback.onResponse(this,
+        fun respond(code: Int, body: String, retryAfter: String? = null) = callback.onResponse(this,
             Response.Builder().request(request()).protocol(Protocol.HTTP_1_1)
+                .apply { if (retryAfter != null) header("Retry-After", retryAfter) }
                 .code(code).message("test").body(body.toResponseBody()).build())
     }
 
@@ -60,5 +61,20 @@ class CancellableHttpTest {
         assertTrue(error is GeminiHttpException)
         assertEquals(401, (error as GeminiHttpException).statusCode)
         assertFalse(error.message.orEmpty().contains("sensitive-test-diagnostic"))
+    }
+
+    @Test fun rateLimitResponseCarriesSafeDelayIntoSharedBackoff() = runBlocking {
+        var now = 1_000L
+        val backoff = ProviderBackoff { now }
+        val call = FakeCall()
+        val result = async(start = CoroutineStart.UNDISPATCHED) { runCatching { call.awaitResponseBody() } }
+        call.respond(429, "private provider detail", "75")
+        val error = result.await().exceptionOrNull() as GeminiHttpException
+        assertEquals(429, error.statusCode)
+        backoff.rateLimited(error.retryAfterMs)
+        assertTrue(runCatching { backoff.checkAllowed() }.exceptionOrNull() is ProviderCooldownException)
+        now += 75_000
+        backoff.checkAllowed()
+        assertFalse(error.toString().contains("private provider detail"))
     }
 }

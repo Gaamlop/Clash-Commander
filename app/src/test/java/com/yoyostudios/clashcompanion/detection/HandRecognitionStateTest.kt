@@ -53,4 +53,14 @@ class HandRecognitionStateTest {
         assertTrue(state.verifiedHand(200L, null, 2_000L).isEmpty())
         assertTrue(state.verifiedHand(2_101L, 4L, 2_000L).isEmpty())
     }
+
+    @Test fun localElixirExpiresWithItsFrameAndNeverSurvivesUnverifiedHand() {
+        val state = HandRecognitionState(detectedHand = mapOf(0 to "Cannon"),
+            frameId = 10, captureSessionId = 4, capturedAtElapsedRealtime = 100, observedElixir = 8)
+        assertEquals(8, state.verifiedElixir(200, 4, 2_000))
+        assertNull(state.verifiedElixir(2_101, 4, 2_000))
+        assertNull(state.verifiedElixir(200, 5, 2_000))
+        assertNull(state.copy(detectedHand = emptyMap()).verifiedElixir(200, 4, 2_000))
+        assertNull(state.copy(observedElixir = 11).verifiedElixir(200, 4, 2_000))
+    }
 }

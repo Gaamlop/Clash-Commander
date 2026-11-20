@@ -8,8 +8,19 @@ const responseHeaders = {
   "cache-control": "no-store",
   "x-content-type-options": "nosniff",
 };
-const json = (value, status) =>
-  new Response(JSON.stringify(value), { status, headers: responseHeaders });
+const json = (value, status, extraHeaders = {}) =>
+  new Response(JSON.stringify(value), { status, headers: { ...responseHeaders, ...extraHeaders } });
+
+// Forward only a bounded delay, never arbitrary provider headers or response text.
+function retryHeaders(upstream) {
+  if (![429, 503].includes(upstream.status)) return {};
+  const value = upstream.headers.get("retry-after")?.trim();
+  if (!value) return {};
+  const seconds = /^\d{1,9}$/.test(value)
+    ? Number(value) : (Date.parse(value) - Date.now()) / 1000;
+  return Number.isFinite(seconds)
+    ? { "retry-after": String(Math.ceil(Math.max(0, Math.min(86400, seconds)))) } : {};
+}
 
 function secureEqual(a, b) {
   if (!a || !b) return false;
@@ -148,7 +159,8 @@ export default {
       if (!upstream.ok) {
         // Provider error payloads can contain sensitive request details. Keep
         // the HTTP status for retry handling without returning or logging them.
-        return json({ error: "Gemini provider request failed", providerStatus: upstream.status }, upstream.status);
+        return json({ error: "Gemini provider request failed", providerStatus: upstream.status },
+          upstream.status, retryHeaders(upstream));
       }
       return new Response(upstream.body, {
         status: upstream.status,

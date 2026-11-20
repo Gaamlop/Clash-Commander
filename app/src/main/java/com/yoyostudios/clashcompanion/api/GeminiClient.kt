@@ -27,6 +27,8 @@ import java.util.concurrent.TimeUnit
 object GeminiClient {
 
     private const val TAG = "ClashCompanion"
+    private val providerBackoff = ProviderBackoff()
+    val cooldownRemainingMs: Long get() = providerBackoff.remainingMs()
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -196,6 +198,7 @@ object GeminiClient {
      * Extracts candidates[0].content.parts[0].text from Gemini response.
      */
     private suspend fun executeRequest(body: JsonObject): String {
+        providerBackoff.checkAllowed()
         val url = AiConnection.endpoint() + "/v1/gemini"
         val requestBody = body.toString().toRequestBody(JSON_MEDIA_TYPE)
 
@@ -209,7 +212,12 @@ object GeminiClient {
         Log.i(TAG, "GEMINI: Calling private Gemini proxy")
         val startTime = System.currentTimeMillis()
 
-        val responseBody = client.newCall(request).awaitResponseBody()
+        val responseBody = try {
+            client.newCall(request).awaitResponseBody().also { providerBackoff.succeeded() }
+        } catch (error: GeminiHttpException) {
+            if (error.statusCode == 429) providerBackoff.rateLimited(error.retryAfterMs)
+            throw error
+        }
         val elapsed = System.currentTimeMillis() - startTime
 
         Log.i(TAG, "GEMINI: Response in ${elapsed}ms (${responseBody.length} chars)")

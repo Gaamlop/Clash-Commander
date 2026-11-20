@@ -3,9 +3,9 @@
 ## Alcance de esta revisión
 
 Base inicial: 0f197fc (1.3). Se incorporaron también los cambios posteriores de
-main hasta 2407188 (1.4 y evaluación offline de repeticiones): tres huellas adicionales, umbral de comparación 0,18
-y mínimo de dos cartas verificadas. Versión de integración: 1.4.1-experimental,
-versionCode 6. Ningún resultado de compilación se considera prueba de juego real.
+main hasta 36ba3ad (1.4, evaluación offline, cobertura y elixir local): tres huellas adicionales, umbral de comparación 0,18
+y mínimo de dos cartas verificadas. Versión de integración: 1.4.4-experimental,
+versionCode 9. Ningún resultado de compilación se considera prueba de juego real.
 
 ## Objetivos verificables
 
@@ -36,11 +36,12 @@ Las pruebas usan escenarios explícitos, sin llamadas a Gemini ni consumo de cuo
 1. **P1: percepción real.** Medir precisión por carta/slot sobre capturas independientes
    del Nothing Phone 1 (Android 15), incluyendo evoluciones y cartas atenuadas.
    No se localizó la repetición mencionada en el Drive conectado.
-2. **P1: coordenadas de arena.** Contrastar puente, torres y posiciones defensivas
-   con una captura real. Se conservan las zonas heredadas; no se inventó calibración.
+2. **P1: coordenadas de arena.** Anclas contrastadas geométricamente con capturas
+   reales en 1.4.3; falta confirmar selección y despliegue efectivos en el teléfono.
 3. **P1: lectura de elixir/amenazas.** Comparar las inferencias de Gemini con
    anotaciones humanas; cuantificar falsos positivos, lecturas ausentes y latencia.
-   La app no dispone de un sensor calibrado de elixir ni de ciclo del rival.
+   La lectura local de barra incorporada desde main es experimental; los valores
+   parciales 1..9 requieren etiquetas independientes. No hay ciclo rival validado.
 4. **P1: resultado de jugada.** Dos gestos completados no acreditan despliegue ni
    gasto de elixir. Falta confirmar transiciones visuales y detectar fallos del juego.
 5. **P1: partida supervisada completa.** Validar parada, recuperación de captura,
@@ -110,3 +111,40 @@ geométrica por imagen, aún no confirmación de despliegue exitoso en el teléf
 Los fallos HTTP muestran únicamente el código, sin cuerpos ni credenciales.
 
 Se localizó además el vídeo de Surgical Goblin “AI IS TAKING OVER CLASH ROYALE… IT ALREADY HIT #1” (https://www.youtube.com/watch?v=X_leWfBQ8-w). La transcripción indexada describe reacciones rápidas pero no publica el sistema; no prueba que el repositorio ClashAI corresponda a esa cuenta.
+
+
+## Incidente confirmado y corrección 1.4.4
+
+Las nuevas capturas sí muestran Auto activo, error Gemini HTTP 429 y una espera
+por mínimo dos cartas mientras el panel informa cuatro. El escáner vaciaba la
+mano autorizada antes de cada inferencia. Ahora HandObservationStore publica
+observaciones completas atómicamente: comenzar otra inferencia conserva la
+última observación hasta su caducidad original de dos segundos; un resultado
+vacío la sustituye inmediatamente. Invalidar captura/partida/escáner impide que
+una inferencia anterior vuelva a publicar cartas. No se autorizan cartas retenidas
+solo por suavizado visual. Las pruebas cubren estas transiciones y caducidad.
+
+El cliente comparte una pausa de cuota entre playbook y decisiones. Tras HTTP
+429 respeta Retry-After y aplica al menos 30, 60 y después 120 segundos si se
+repite, sin llamadas durante la pausa. Una respuesta simultánea anterior exitosa
+no borra esa pausa. Auto informa que durante ella no hay jugadas IA; no debe
+presentarse como defensa operativa. La caducidad táctica sigue siendo seis segundos.
+El Worker conserva solo el retraso saneado, sin propagar cuerpos/headers privados.
+El Worker remoto del usuario no se ha redesplegado: el APK utiliza la pausa
+predeterminada aun con el Worker previo; respetar su Retry-After requiere actualizarlo.
+Esta corrección no aumenta cuota ni soluciona la dependencia táctica de Gemini.
+
+Se integraron 360bc6b y 36ba3ad sin recuperar su revocación durante inferencia.
+La lectura local de elixir comparte fotograma, sesión y caducidad con la mano;
+se usa como veto adicional de coste y contexto experimental, no sustituye todavía
+la verificación visual de Gemini. Cobertura y mano completa se registran sin
+imágenes ni identidades; cobertura no equivale a precisión de reconocimiento.
+
+Pendientes concretos: Valkyrie/variantes visuales desconocidas; precisión de
+amenazas; validación de elixir parcial; confirmación visual de gasto/despliegue;
+latencia medida y partida completa. No hay victorias autónomas demostradas.
+
+
+Verificación local 1.4.4: 95 pruebas JVM, 13 pruebas del Worker y 6 del evaluador
+aprobadas; lint sin errores (75 avisos heredados); assembleDebug correcto.
+No se hicieron llamadas a Gemini ni partidas reales para estas pruebas.

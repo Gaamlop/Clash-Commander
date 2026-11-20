@@ -24,8 +24,9 @@ object HandDetector {
     private val matchGeneration = AtomicLong()
     private var scanJob: Job? = null
 
-    @Volatile
-    private var recognition = HandRecognitionState()
+    private val observations = HandObservationStore()
+    private val freshCoverage = FreshHandCoverage()
+    private val recognition: HandRecognitionState get() = observations.current
 
     /** Display-only hand, including a short grace period for missed detections. */
     val currentHand: Map<Int, String> get() = recognition.displayHand
@@ -35,6 +36,11 @@ object HandDetector {
         get() = recognition.verifiedHand(
             SystemClock.elapsedRealtime(), ScreenCaptureService.currentCaptureSessionId(), MAX_HAND_AGE_MS
         )
+
+    /** Local elixir and hand share one completed frame and the same freshness checks. */
+    val ownElixir: Int? get() = recognition.verifiedElixir(
+        SystemClock.elapsedRealtime(), ScreenCaptureService.currentCaptureSessionId(), MAX_HAND_AGE_MS
+    )
 
     /** Changes across match transitions, capture renewal/loss, and scanner restart. */
     val matchSessionId: Long get() = recognition.matchSessionId
@@ -54,7 +60,8 @@ object HandDetector {
         minCards in 1..4 && currentVerifiedHand.filterKeys { it in 0..3 }.values.distinct().size >= minCards
 
     private fun clearObservation() {
-        recognition = HandRecognitionState(matchSessionId = matchGeneration.incrementAndGet())
+        freshCoverage.reset()
+        observations.replace(HandRecognitionState(matchSessionId = matchGeneration.incrementAndGet()))
     }
 
     // This brightness heuristic is deliberately conservative. It does not prove
@@ -148,9 +155,9 @@ object HandDetector {
                         if (matchDetected && consecutiveNonMatch == 0) {
                             // Invalidate in-flight decisions immediately, even though
                             // the display tolerates brief transitions/animations.
-                            recognition = recognition.copy(
+                            observations.replace(recognition.copy(
                                 detectedHand = emptyMap(), matchSessionId = matchGeneration.incrementAndGet()
-                            )
+                            ))
                         }
                         if (matchDetected) consecutiveNonMatch++
                         diagnosticStatus = "Sin mano jugable: esperando partida o salida de resultados"
@@ -171,20 +178,28 @@ object HandDetector {
                         consecutiveNonMatch = 0
                         Coordinates.updateFromCapture(frame.width, frame.height)
                         val startedAt = SystemClock.elapsedRealtime()
-                        recognition = recognition.copy(detectedHand = emptyMap())
+                        // Keep the last completed observation until inference publishes a replacement.
+                        // Its original frame timestamp still expires after MAX_HAND_AGE_MS.
+                        val pending = observations.begin()
                         val newScan = CardClassifier.classifyHand(frame, deckCards)
                         val merged = HandStateReducer.merge(lastHand, newScan, misses)
                         currentCoroutineContext().ensureActive()
                         if (generation != scanGeneration.get() ||
                             ScreenCaptureService.currentCaptureSessionId() != captureSession
                         ) continue
-                        recognition = HandRecognitionState(
+                        if (!observations.complete(pending, HandRecognitionState(
                             merged.hand, merged.detected, snapshot.frameId, captureSession,
-                            snapshot.capturedAtElapsedRealtime, recognition.matchSessionId
-                        )
+                            snapshot.capturedAtElapsedRealtime, recognition.matchSessionId, OwnElixirDetector.read(frame)
+                        ))) continue
                         misses = merged.misses
                         val count = merged.detected.keys.count { it in 0..3 }
-                        diagnosticStatus = "Vision: $count/4 verificadas (${frame.width}x${frame.height})" +
+                        val coverage = freshCoverage.record(count)
+                        if (coverage.frames % 30 == 0) {
+                            Log.i(TAG, "CARD-VISION-METRICS: frames=${coverage.frames} " +
+                                "coverage=${coverage.coveragePercent}% fullHandRate=${coverage.fullHandPercent}% " +
+                                "emptyFrames=${coverage.emptyFrames}; accuracy=not_measured")
+                        }
+                        diagnosticStatus = "Vision: $count/4 | elixir ${ownElixir ?: "?"}/10 | cobertura ${coverage.coveragePercent}%" +
                             if (count < 2) ". Detector reintentando automaticamente" else ""
                         if (merged.hand != lastHand || merged.detected != lastDetected) {
                             onHandChanged?.invoke(merged.hand)
@@ -197,7 +212,7 @@ object HandDetector {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                recognition = recognition.copy(detectedHand = emptyMap())
+                observations.replace(recognition.copy(detectedHand = emptyMap()))
                 diagnosticStatus = "No se pudo verificar la mano; revisa captura"
                 Log.w(TAG, "CARD-ML: Scan rejected (${e.javaClass.simpleName})")
             } finally {

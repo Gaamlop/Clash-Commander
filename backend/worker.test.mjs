@@ -200,3 +200,19 @@ test("transport exceptions return a fixed error without logging exception detail
   assert.deepEqual(await response.json(), { error: "Gemini upstream unavailable" });
   assert.equal(errors.mock.callCount(), 0);
 });
+
+test("rate limits preserve only a bounded Retry-After, without provider secrets", async (t) => {
+  let delay = "75";
+  upstream(t, () => new Response("private diagnostics", {
+    status: 429, headers: { "retry-after": delay, "x-private-provider": "secret" },
+  }));
+  for (const [value, expected] of [["75", "75"], ["999999999", "86400"],
+    ["invalid private diagnostic", null], ["Thu, 01 Jan 1970 00:01:00 GMT", "0"]]) {
+    delay = value;
+    const response = await worker.fetch(request(), env);
+    assert.equal(response.status, 429);
+    assert.equal(response.headers.get("retry-after"), expected);
+    assert.equal(response.headers.get("x-private-provider"), null);
+    assert.equal((await response.text()).includes("private diagnostics"), false);
+  }
+});
