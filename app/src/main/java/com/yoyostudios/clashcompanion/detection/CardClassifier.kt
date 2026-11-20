@@ -138,25 +138,18 @@ object CardClassifier {
         val deckIndices = mutableListOf<Pair<Int, String>>() // (model output index, DeckManager name)
         // Honor the deck explicitly passed by the scanner, not an unrelated
         // mutable global deck snapshot. A stale deck silently rejects all slots.
-        val requested = deckCards.toSet()
-        val selectedDeck = DeckManager.currentDeck.filter { it.name in requested }
-        for (card in selectedDeck) {
-            val wantKey = card.key
-            val wantKeyNorm = norm(card.key)
-            val wantNameNorm = norm(card.name)
-
-            var matchedIdx: Int? = null
-            for ((idx, key) in idx2key) {
-                val keyNorm = norm(key)
-                if (key == wantKey || keyNorm == wantKeyNorm || keyNorm == wantNameNorm) {
-                    matchedIdx = idx
-                    break
-                }
-            }
+        // The scanner's requested deck is authoritative. currentDeck can change
+        // asynchronously (or still be empty), causing all four slots to become '?'.
+        // Match the model's canonical keys directly against requested card names.
+        for (cardName in deckCards.distinct()) {
+            val requestedKey = norm(cardName)
+            val matchedIdx = idx2key.entries.firstOrNull { (_, key) ->
+                norm(key) == requestedKey
+            }?.key
             if (matchedIdx != null) {
-                deckIndices.add(matchedIdx to card.name)
+                deckIndices.add(matchedIdx to cardName)
             } else {
-                Log.w(TAG, "CARD-ML: Deck card not in model classes: '${card.name}' key='${card.key}'")
+                Log.w(TAG, "CARD-ML: Requested card not in model classes: '$cardName'")
             }
         }
 
@@ -166,7 +159,7 @@ object CardClassifier {
         }
 
         val result = mutableMapOf<Int, String>()
-        val allowedNames = selectedDeck.map { it.name }.toSet()
+        val allowedNames = deckCards.toSet()
         val usedNames = mutableSetOf<String>()
 
         // Classify slots 0-4
