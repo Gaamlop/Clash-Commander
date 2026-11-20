@@ -1,0 +1,12 @@
+{
+  "source": "Owner screenshots showing 1:41 and 1:57 remaining, supplied in this conversation; manual approximate annotation, not sensor measurements",
+  "width": 576,
+  "height": 1280,
+  "riverTop": 550,
+  "riverBottom": 600,
+  "ownArenaBottom": 970,
+  "enemyLeftTower": [90, 290, 160, 370],
+  "enemyRightTower": [420, 290, 490, 370],
+  "ownLeftTower": [90, 750, 160, 840],
+  "ownRightTower": [420, 750, 490, 840]
+}

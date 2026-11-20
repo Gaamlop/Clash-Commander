@@ -9,9 +9,13 @@ app/build/
 
 # Large model files (download separately)
 app/src/main/assets/sherpa-onnx-moonshine-base-en-int8/
+app/src/main/assets/sherpa-onnx-whisper-tiny/
 app/src/main/assets/sherpa-onnx-zipformer-en-2023-04-01/*
 !app/src/main/assets/sherpa-onnx-zipformer-en-2023-04-01/bpe.vocab
 app/src/main/assets/silero_vad.onnx
+app/src/main/assets/local_hypno/arena.onnx
+app/src/main/assets/local_hypno/arena.validation.json
+.local-model-cache/
 
 # Native shared libraries (~24MB)
 app/src/main/jniLibs/
@@ -51,3 +55,10 @@ m3_test_log.txt
 # OS
 .DS_Store
 Thumbs.db
+
+# Python replay evaluator caches
+__pycache__/
+*.py[cod]
+
+# Kotlin local compiler state
+.kotlin/

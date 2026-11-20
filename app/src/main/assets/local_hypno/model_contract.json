@@ -1,0 +1,9 @@
+{
+  "source_commit": "093604e9a844d1032204f866bb76f9be8458bb87",
+  "source_sha256": "b0c2afc3c55fbcfbaf467956f03e4feada10f203a44f57003ccfc545d8fd5379",
+  "output_sha256": "1d119408ef2bd23495a5771636bbb7ae2bbeda30af431b3836c18b132b119bdd",
+  "input": [1, 3, 640, 640],
+  "output": [1, 397, 8400],
+  "classes": 393,
+  "license": "AGPL-3.0"
+}

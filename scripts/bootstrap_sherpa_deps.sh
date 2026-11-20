@@ -1,4 +1,3 @@
-
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -7,19 +6,25 @@ cd "$ROOT_DIR"
 
 ASSETS="app/src/main/assets"
 MODEL="$ASSETS/sherpa-onnx-zipformer-en-2023-04-01"
+WHISPER="$ASSETS/sherpa-onnx-whisper-tiny"
 JNI="app/src/main/jniLibs/arm64-v8a"
 
-mkdir -p "$ASSETS" "$MODEL" "$JNI"
+mkdir -p "$ASSETS" "$MODEL" "$WHISPER" "$JNI"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 ZIP_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-en-2023-04-01.tar.bz2"
+WHISPER_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-tiny.tar.bz2"
 VAD_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx"
 JNI_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.23/sherpa-onnx-v1.12.23-android.tar.bz2"
 
 echo "Descargando modelo de voz..."
-if [ ! -s "$MODEL/encoder-epoch-99-avg-1.int8.onnx" ]; then
+need_zipformer=false
+for f in encoder-epoch-99-avg-1.int8.onnx decoder-epoch-99-avg-1.int8.onnx joiner-epoch-99-avg-1.int8.onnx tokens.txt bpe.model; do
+  [ -s "$MODEL/$f" ] || need_zipformer=true
+done
+if "$need_zipformer"; then
   curl -fL --retry 3 "$ZIP_URL" -o "$TMP/model.tar.bz2"
   mkdir "$TMP/model"
   tar -xjf "$TMP/model.tar.bz2" -C "$TMP/model"
@@ -28,6 +33,19 @@ if [ ! -s "$MODEL/encoder-epoch-99-avg-1.int8.onnx" ]; then
     src="$(find "$TMP/model" -type f -name "$f" -print -quit)"
     [ -n "$src" ] || { echo "Falta archivo del modelo: $f"; exit 1; }
     cp "$src" "$MODEL/$f"
+  done
+fi
+
+echo "Descargando reconocimiento de voz en espanol..."
+need_whisper=false
+for f in tiny-encoder.int8.onnx tiny-decoder.int8.onnx tiny-tokens.txt; do
+  [ -s "$WHISPER/$f" ] || need_whisper=true
+done
+if "$need_whisper"; then
+  curl -fL --retry 3 "$WHISPER_URL" -o "$TMP/whisper.tar.bz2"
+  for f in tiny-encoder.int8.onnx tiny-decoder.int8.onnx tiny-tokens.txt; do
+    tar -xjf "$TMP/whisper.tar.bz2" -C "$TMP" "sherpa-onnx-whisper-tiny/$f"
+    cp "$TMP/sherpa-onnx-whisper-tiny/$f" "$WHISPER/$f"
   done
 fi
 
@@ -43,7 +61,10 @@ tar -xjf "$TMP/sherpa.tar.bz2" -C "$TMP/jni"
 
 # Only copy ARM64 binaries. A generic find by filename silently selected
 # x86_64 libraries and packaged them as arm64-v8a, crashing Voice Engine.
-for f in libonnxruntime.so libsherpa-onnx-jni.so libsherpa-onnx-c-api.so libsherpa-onnx-cxx-api.so; do
+# ONNX Runtime Android AAR supplies libonnxruntime.so (API 20, also supports Sherpa's API 17).
+# Remove an ignored copy left by older bootstrap runs to avoid packaging the old runtime twice.
+rm -f "$JNI/libonnxruntime.so"
+for f in libsherpa-onnx-jni.so libsherpa-onnx-c-api.so libsherpa-onnx-cxx-api.so; do
   src="$(find "$TMP/jni" -type f -path "*/jniLibs/arm64-v8a/$f" -print -quit)"
   [ -n "$src" ] || { echo "No se encontró la biblioteca ARM64: $f"; exit 1; }
   if ! readelf -h "$src" | grep -q 'Machine:.*AArch64'; then
@@ -59,4 +80,4 @@ if [ ! -s "$MODEL/bpe.vocab" ]; then
 fi
 
 echo "Dependencias verificadas correctamente:"
-ls -lh "$ASSETS/silero_vad.onnx" "$MODEL"/* "$JNI"/*
+ls -lh "$ASSETS/silero_vad.onnx" "$MODEL"/* "$WHISPER"/* "$JNI"/*

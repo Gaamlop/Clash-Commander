@@ -1,0 +1,90 @@
+{
+  "columns": 24,
+  "rows": 28,
+  "references": [
+    {
+      "name": "Cannon",
+      "variant": "cannon",
+      "source": "https://cdn.royaleapi.com/static/img/cards-150/cannon.png",
+      "sha256": "29a87c78c776d3ecaa939d28d3bf57ebd09bfe7feeb200f1c3c0c50e669f7693",
+      "gray": "wL2zt7mytbixsbWzsba6nYJgUomirbG3uLysq7W/ys3At7u3tLuulHRgV4yvtbWeramkp6/I29bLvr7Eq5q3iFxFZK67urafuKygp67A29zUxL2sirWQVSodLHvfvLifucG5wbfC2tbCs6iliqJsKRgTHCx91bifu8nH0c/U3dbMrqCki5JVGQgJDig0n72ewNLS2N7WwsSqoY6GdHdJBQQFBw8zSbycxNjh4dOZopuOiHJwYl9GAAABBxQuQpOcx9zkzpWKloB5dF9bVFJhAwEHER4yUX+eytu3oXSFf2xkZFRHSUdbLAgWIipIYneazciAi2lvaVhSVUs+PUdBaiQkMjJObWuUzI11gF5cU01JRj04Lj84TX5WOUdlaW6Xq2pod1dLSEM9OjMvJC5CMk5cZmpkWmighWVYZUg7Ozk0KiEdGx8vQjA1QUhFSIOiZ15FU0QtMCgdFxUVExUbKDU7Ojs+U8mmVVUyOT0uGBQREBAQDg8UIBwiKDV51NapSUkoM0AyHQkIBwgJCxgsTaWjst3j5N2tODUsX1cWKA8BAQIDBxJa2t7f4uDg4uK6o1QkYVMpFw4RBwQFDi+82tze4t7g5OC+uruHhXhvdWxaVVJLY7zi7u7j5N/e4d+/XGloVE1KTUxFODUzNVeNipnL4uHg4+DATVhcQjw5PDk0KyomJkJ+doK829rd4ODAiYKTgH14gXJpaXCEz93huH/b1riy2Nu/VmRqeI2NdHmGfpHDiXdqk2WghXq51ceqVVtcU2Seg4eGdoHInHpwhqSNfINGuK6ZT1JQV2d2fIaQjY/Lj5F8eYd+f3w+arWYWXJnYlVgdnR3xJ/Ij4GVepGgimY1Q5ajTGJYW1xkimUeUZy8pYWFb36AWT03OFKp"
+    },
+    {
+      "name": "Dart Goblin",
+      "variant": "dart-goblin",
+      "source": "https://cdn.royaleapi.com/static/img/cards-150/dart-goblin.png",
+      "sha256": "40b832b44aa84e3904bfbfbb942080bba0076ca127f13fcf8a2a19c58ed28f86",
+      "gray": "LjUzMyElLT5JV1ZaX08YGBweJyoqLTKBKzU8QDcnKTVBUFpdYlEaGyElJiktMDM/KzU8REM4KSw6S1tZYlY7OSckKCwvMjU/Ji4zOkJAQktUdYxqYFpgX11GKS0xNDdBGyIuTVFprLSqosS1zIVpZFtVLC8zNjk+KDuKoH2go6+vqbu90MClYVZRMDAzMzM7JTl7kp2MrLK/s6vQxr+/glNKLi0uLy84EzdEmKCTuanDwqS7sqaxpVJKL0QrKyozFCI9fKWxpZ6kpKufdQSAvVM6QXEqKCcwFBU0VKavlnkhQ6aXez8Zsl5SPmgqJCMsJTA5SXymlFZFOnqfroNkta+xbYd3ZS0oPkFBP256mZNgWpmji3h6gJWQZ24UL1QlPkFETVGWqp+ZkZ98dFxjZGtoVWkZNlYkQEZGU0GEpJyumnN0amNcWmJcTUtnbCwhTWBNRUdmko6OiGl4UF5ZTkhQTUJPIBggbWRUSkRCkY+GiYN2RlBfYzwyNz0vGhggXVZOR0IriY6Qj39gQkt3YzEpPjQbGxkhRkdEQnBrg4aBdVtIQVJ1RDgzLCEfHBohQ0hGYI91c3BnWVJeZGZvT1xPJyUiHhshSU9PZVhfWlZFWlxre2x3aHtwKSckIh8jUFhVVlZKQEFPUl5tfWuAcYJ/LCooJiIkU1xZVGU9K0FTP05OU2qIXH6EMS8rKCQmVlxWUWtBPjgwMjE6RXB5PE9WNzcwLCgoVlxXU2pGRD86NDNIWUtEPj49PV1ILysrVF9bWmtWSUZCPDlLaGBDRkRARExZOy4sQD1NXXdjSUhFQ0FNZm1HUFdJP0A5Py8rNjk5RVlCQENDRUxea1snNTwzKiwqLiwsOTYxMSUeKDo8RE9dYzceIR8dJSopLzAv"
+    },
+    {
+      "name": "Goblin Barrel",
+      "variant": "goblin-barrel",
+      "source": "https://cdn.royaleapi.com/static/img/cards-150/goblin-barrel.png",
+      "sha256": "a4cf4e5075ecc0c601dff6418e398b6c262ba98a3cd13c67d91d85ebc1d7b6a0",
+      "gray": "5evs6unn5d/QzdLd29vl5+Pf3dzc29vJ3vDu7u3r6ebc1tTU3uDn6enbzdbW1tW2u9rc4uPn6Ofk29jGwd7iuausvbrP19a3l5+5trvH5Ozm1tC9sde4kHxkhrKwy9e4mIugo6Ckq+nw1Me+zNzD0Y90YaKprNC4l6mCgouUpqnr07vC48fOe6qDXXyjo6u1l6RHKikrREGMwL3SwLytnJecoZtmfZOcoqs1KTE4Njo+dr+unKKlrcnP0YVaVFqMocOlNFExMjc8nrOoVomdiMC6tWxoZVF5kZi9g0g1QkZitaqfLHCZe5ypkoefiGF6mouGhzAyOUKfpqSOJFKBfXV/eI1Opny3YXmDSh0oODmZpJqGaRA7en95iYufisjAX1EqGxcmNCV8oYV3Z0AFRFpykox/gaO2YW5cIA5LYRZElIdyZS4HCi1WgnSHwcG7Ymx/NC9JVxYMbI9+f3ZdTmNscIzP3d29Ymx6WT9OPxsLHX+GenFeVnK/1d3d3d69Y21AWjpIPSUhGj1gUEdJYbvl393e3d29Uis9jH1CNTc8NTE1MDpAMpXh6+Te3d29IFdvbquLMjJHRT0qOV9yMHnI6+vm3d29W2xnZm2WbSUyMR0fV4J9K1uu6urr5+C9R2BlZmJWrFocMxNbhZ1wJ0iW6unq6urFXU9gYU5jiKlzkKWlnpFTK0Bz6Onp6enHW2ZPUmRjY3d+oJqgpoEoK4OWzOjp6OjGWWRlT2BgY3KqqJ2OklcNbJCIzefm5+fGWGJlaUlfX4Kuq5OSfXhfZIuZ5ubm5ubGWGNib3RJRV2bpJ96dlRhP1Ot5eXl5eXFWWNiYnR9KjNNh5V0M0BIRlLU4+Tk5OTEYGNjYWFwfEkqPDkqMEVGQsHb3N3d3d6/"
+    },
+    {
+      "name": "Goblin Barrel",
+      "variant": "goblin-barrel-ev1",
+      "source": "https://cdn.royaleapi.com/static/img/cards-150/goblin-barrel-ev1.png",
+      "sha256": "9d9960a859357859a7959bc221d3e4c4b7ea30b462ad39c73781f06755e1f4e4",
+      "gray": "bnBqSWhZUFBxpqFgfsiiilVQWWyNanBveZmyr7OwrrO7o2w/foTEs7mvsLO+taF8ssKrsbOzs7+jjTNLWWN4vMm0srKxrLu7zXtkYWaIorXAj1QsPkGcsM/KrMHLzqnCultRVWF1bZ2/t4xIOZ2V083MurfP2bW2uVpngWtCPEWVk6KTo5ilmMbIx8jN3LW1ul6ApGZfc0+Cbp2/uqJ0bH6qvbCVpoSzumFki2NjhWuFtJC7onZvbnBygYF4i4a0umRoeFtWXztOh6DCfHd0c3R1cF9hiJi1u2hueGxTMzM1cHGfgYaEfHhvXFZFd36vu22AZT9HRjtaZcWePUaAnoF8aTpQR32rvHdaOjYzSG2bsrvYpM9UdJKRXUxZU2KwvIFkR3BWX5eMoqe2x+eMhHSKT0VYgnewv4Jqo7KmmoRiRJWR4N7h2r5lOj1CT2iwvX+vs7U7GhQcj2V+pKfS2d3Del5PPkmrvqONtKsbEhImfmZgjqG6xc7Bg31peHypv4Vcja9nFRMeg2FVZIaWnrauYXxxjpCwwXtaX3yxfRwYglxYYG6Bmr2sZnpmZmSxv5lpZaGqooRzWEZaWmF5o8aqbV1QO1ipwZDDwci8q29SdTdPRktuoM2zTjYYTYmwwGmhzsWndVVHYUNIQqhhkcidTk5egomvwWt7eXRlVz8rNFlYR2Bae7nWu7msoYGtvm95YkFHRCclJENYXFxoaprIi4+CdWirvYWLaFdVZ2tVRC0kMl9hfLa4i41/c2+wvp5+j3JuaFxXWkwyJS5Pwtmfjp2qwaWvwamEhntzZVpValQcOlaHxrnBvZ6jpnSqwpqFeGhoZllSbl1VbH2jkW9xaF1XSmSrvYJ3cGVHQENLVz18gYpuYG1pZF9FK16v"
+    },
+    {
+      "name": "Ice Spirit",
+      "variant": "ice-spirit",
+      "source": "https://cdn.royaleapi.com/static/img/cards-150/ice-spirit.png",
+      "sha256": "b521fa2ff644b939847d104b61befe4588ef023dc05f110b9ac992dede23efe0",
+      "gray": "Gx0YGBgZGkOaVSUldnycs74dCwsLCwxwHh4cHBwcOIW0pT9YeoeyuL9IDAwLCgsfIyMgISA0epe42GV/gKm5ucN3Dg0ODAseKCgnJytygZm1z7CSrbK0vuWgGWmJFQweLC4uLFx3gp69yuXXxLmz0OrCbJepSQ0eVTMzNWZ4ib/H3vPw7enY2Orot7W4fA4eNj0/SWiFv+fn6t6hkr/q8/P4+NDArg8fbW2vc1jM3eHj3reGf4nK7PD08vLW1RYfk6nBapDc1tTW37yWkIi14+TUibfl4i8gn6nDf9zUzcHEz86qnpW+3uKeZnzK3ywimKez19XSlWSeucnLwrvU2NibgHe642glm62259DETC5XiZ68x83QzM20lY3H2aQvcK7F1sqzLxsaNYOImbK/x8O9trfEyrQ9UoK6y8apJRgVFlOMbXWQm6WrrbGzub9vU11vzcGzKhgUExQdHnSIhX50fHqGmKyMVVdi0r26PRsVFBQVFiVNY2lcalFmpq+VVFpixce+RicYFRUWFhkjMTpEREdsuKuFVVxkscbDaWAhGRgZGh4mMTg+QUqQwpZ3WWBkidfCuXw9HyAhJixBQEVJSWO9qFVFW2VkcbG7yKdrg1EzOD9NcVJTWae6WCwwXmZrgZS3u8++jZBhhGpeY1ppqb1uL08vYYN/iJSar7nLz7qiopCAf5q+u3A0N0MxbYWQnpWRj7mxusXJv7y9vbqiXz07QkxCdpSdopV7bY6jpqSsq6eehmpLbkN3SVBWh6ufk3Jod5aXk4BucmpZVE5NXVJySEI+fpqOdXNyk5uee2dmZGBcWVVSTk1QQz88fIB6eHZ7oZt0b2tnY19ZVFJoWEtUPjw5c4J8eZJ3k2qIZ2JgXFl8gE9LkVBDQT46"
+    },
+    {
+      "name": "Princess",
+      "variant": "princess",
+      "source": "https://cdn.royaleapi.com/static/img/cards-150/princess.png",
+      "sha256": "c90f04322bcf594194aadf31dfa5787f4156e9b99cdfa8e25d4b18085503292f",
+      "gray": "w7mdhndRLlWY2NLRl46rll8sMjxCcKvEkH5ePEiDx8WSgYmahoWKhaG3jUktNDteN0GP0dOyhW9fOThPW2SBgYOGpsLEi0Q6LHCvhW9zXi45SjQ5SU5IZoiak5KEn9g7MHJfcqh6PCIkPFgtNUxdPUynjI2Pe3FBM1tXXjw7QjIbIzhMLCdGTHhRfo6Ojmc3MElBIRwbJEQ6Hh0oNB0cUk0dXYqOj4I6LDY+I1pYSj5diS0XHRkWZBYSJ3SOkIRBLDpHToWLinrR6Kc7ExNiHQwRF2ePkYZCLD5Ib5tCRT8xUoy1cil/FwwPFGeTlYZCLT1AhKt3KREXKDKH3cdtEgsQGHyXl4hCLj9Bh5kha8YwNjl8zsNGGhEYJpicmopDK0E7hLjB2tk4SZK327hKHFkSU6Kgn45DKy03a7PH0Nrg3eDfzsmlMIcuiqenpZJEKxsmXZGxwtPh6ujPvby0qsGCqKysq5VFLBsuWm2Nqr3L2ODGhWiSpbqBjbKzrIM6KhkyZGF4kqq7yc/f59WynKxUTpx6Tlw9KRYoGVBqgKi81LSoqJiIk51yXWCFp49ALDBKGBRbe6uoq8O3pJ2CYE5PW4tuWV87LCcmFRcdVoh+b46NX19qe29XZ36ToII8KhgWECM/eKCIYUteeF1TZ3WFe19SVlEzMTM5bWdoh45vUVhmaW9kUEp1jM3pcVw8NpRke5mkqpqCW0E2HTORgKpuZZXkj2JAPODAo4U+OTQWKT1UEj+Ytm5RW2CRrnhEMXhpfXBXPEQ7TWJtMTBMV0tkYl2UjIA+L798T1FOOlNYbHx2TEhVV4Olt3B3cII4OE91g3BVQHxlZ2RVWF1eYGi1tWlpW0orb11FNEJfeIhkdHR3a2prZGJyWkAuPVZm"
+    },
+    {
+      "name": "Skeleton Army",
+      "variant": "skeleton-army",
+      "source": "https://cdn.royaleapi.com/static/img/cards-150/skeleton-army.png",
+      "sha256": "8ae7b4b44938dc074862cb518f15f2a3273246f41f66f92d8e0ab70c70f0714c",
+      "gray": "QEhHRnnL3NTD3eXf07mbg5CkzlpTVliSPkZOkK1zZImQm9bVzbScg4+gz2VRV1VYO0FWek1FTkUwlLVfMkV+jIyXy2FRUlBTO0FMgUJIVk8LiZsvAwNwmZOdv05KTk5QOkBtjEhDZW4wbptfExWfpaevr0VIV1JQOkCXhl9Ee8LERIu2sLiqjk5whERGSkxSOT9mbGpCS4G2xq6ilIqaxMzNybOWcktSOEBHXKqewaC4x6OMb2LW3uPbzMq3s65vNz+E5/Xv4tHCxbZ6aLzd3eTdxLKik4aJQbL49/Lq28i1qKKwsNbZ0tvQu6CQg29kwvX1+O7r28S3oJKTqMvTzM+9opSLemRX2fPv8+jp6tvRwauRnbjHvbCJdHBnW2dk1e/s3NHd4suwmX9/maq3pUoSETdWV2VY0MmvqMXcwWY6K0BfkqGfkBcBByNyZExDjFIiM6PkjR4AAAtlh6BhfzgQFVmabxEWdBcDBm/fjioAAQiBk6NuY19ndI5+SREenioHDZ1fYnkjCyifqq/YPThMbHIfQzQ3xm0+jN8fLJ2WpKqSoc7QWDRHXGJRUVlbvNzb4tSmlJCBeHqJqMnFRVt8iHlOS0FIaYmGqau1jWlZUoGZsafCvcC1q6erhVVvTEhWlcHCjW1eeIqqqKGai4yKh4F9hZiDQ0FBb3VaTzhHf5eloKBVUmNvdHJsa3R3OzpFTnpnYlFygp+bnF0hMlZqcHtzaH9tP0xaT3hfO1t0jJCXfR8xWHiLh3tpYGJVTVNQT4NrQG1+hYeJJCZfjJOFc15RVlc8T1NcdUNSYXSCeoI/G0+Cm5VfMiY0UlAaTIdrQzxEant4emAVQnuNl1omFRY8Y1kQUH+BQjo/b3Z2dRs4cY6ZhTMjFxZHfXUd"
+    },
+    {
+      "name": "Skeleton Army",
+      "variant": "skeleton-army-ev1",
+      "source": "https://cdn.royaleapi.com/static/img/cards-150/skeleton-army-ev1.png",
+      "sha256": "f75b902c2c758b1fb0591c612e7a6dabf4e297ffd7f12dd22b03e2a32cc45d6b",
+      "gray": "bnBqSWhZUFBxpqFgfsiiilVQWWyNanBveZmyr7OwrrO7o2w/foTEs7mvsLO+taF8scGrsrOzs7+jjTNLWWN4vMm0srKxrLq7zXdYUlVLTWSkj1QsPkGcp6CtvcTGwqfBuU48PEQ2MUSOroxIOZ2UoX6XvsTLy6y1uEtBQkhHW4B/pqSTo5iof3uJpLrDxpCyuE9FZoeMcFiYo7S1us2bcnF5h42aq4OquFRlg5CSbDWMmq+Mtsq0imp1nZampoOsuFNyYUt8eUZllJuXos7Jn3eBf3GMqIWvvFxuYmp1YTI9i5GilMbgyJF8fVBYdn2yumpkhYB2VTMrc5Goo6iVe3l4bGh6k4WwuWVybm1uUjk0WI+TX0VXkoSMaXGLkXWtuFVocmxgWERVZnpzUVSMrui3d3iQe3WvuFNTgXFkXlxgSEltk7HM3Ni5kH6Ie2epuE5ps823f1pjY5K6u5aYss3Vxpt9dWGouFCmvNPUnVGIcHasnX6ZvbWSZDdCXW2ouFWpn7nOn2JaUFeRZXuDYVFIIg00ZWerumZrgICjpGg9P0l/fp1ycG5jFClkYmCqvWg7g4M0Y24yQVtkk41LPBwSR3FoXmCovGl5cbmoqWRCNUFvWDs/ST1vf3tvXH2rumtsjKVwXmktOSVQYlpic3iSpZVseXuouW6RmMaNp8VyrothS15NWop1OkZzb2WovomMx5uos7bKsZQ9WGFcR3nLtnUsT2iqu2tcpnpXUYJtZnI9ZY1iTFF9cl8TMl2nuVpTi5F9b3hmQmdOV2KzcWDNx2cTFTKhul9Zd1pMT2luQzwzXmpHT25BXo0fEi2ht1lkTlBMSXJeUCUaNBolYWEjDhoRI0Gkt0QuO19cV1pXRS80Vi87TVMiFyQ0N0Ok"
+    },
+    {
+      "name": "Valkyrie",
+      "variant": "valkyrie",
+      "source": "https://cdn.royaleapi.com/static/img/cards-150/valkyrie.png",
+      "sha256": "48a13d0de2de0e6bb8d2c305edee41c1c37956208c862ff4ae5cc8c5d0aa2e2e",
+      "gray": "lZeIbnGWo4NpRU15g4eSVTk0LSUnKzF/hoh4coqek2+Fq7GOkaCMjVMwJyouMzM8f3Jtm6pie4GHi36Ci551eYszMDQ4Ojo1a3OYuap3UVRfYGRucFJAWIVhU1ZYVTEwb5m0p35mVzQ0ODUzVnZ1VGRsSDs8T2Yyh6lWSlFPRD48NS1dpdHS0r94OzwzPVNln7N+WVlVSkAoQJiYWZjW1NjPTBktOEtmlIhuZ51jLxw+epWdjlq3293YjiEPJkpgRGZ/cIRUZy1MSUVObl162NzbrTEQEj5NLGZ0iISYX05Gdb9kMl5p1L2/tj8TESZBLn11hpSPPYamn9VVHlSc0ol3eFAcFBg5TnyAkJ5OWZqywsrHhpKi2ppzWz0lGBgtY3aDm381ZJaqtsDDuYOBwr2wbh4fFRwkXW9wbyhNZ4+lr7S1hmVqgNfXohwfFykuNjJPVjRYaIecpaehmbfatNnh15gYGktDJlaCP0VeaoGPj29PXGCR19/h3sgfE0pcX3NiHCFkbH6QfTM9SJBittzf2ckoFklvWE8jFh9icHmaURUsEAUvldfZ0L8eIl9yIRsZIx1MeHSaXWuYungMkMzQx58jYHh0Hh0qKRodend7dHJsdplluMbHu292fXJ8HSAwLBoXO4Z3dYiZlpy9zsS6mXJ2b3d+JyYrNSEfIG1+eISsuLe4u6+ScWxpbHJyW0gxLDA3PmJaYWVkcHyCelNIamRlbmdjKU9MTTcoZl5fWUpAMyQoVVdva2dtVWlVKjxOTSE/WlhcXFVKRWmOkJqXj3xWUF1cN08+JzlITlddZHKDhnxwen18foSMkJhydFUqV2h1dnGDmqiBXHBaXG+HkJSYmp2OfGh0g4WBeHJwd4NnXVBVWGGFmJufoaGM"
+    },
+    {
+      "name": "Valkyrie",
+      "variant": "valkyrie-ev1",
+      "source": "https://cdn.royaleapi.com/static/img/cards-150/valkyrie-ev1.png",
+      "sha256": "23c95f1c9380c8af927fcfbdc0152566acffb936f6f093fdfa48a919bb0e763f",
+      "gray": "bnBqSWhZUFBxpqFgfsiiilVQWWyNanBveZmyr7OwrrO7o2w/foTEs7mvsLO+taF8scKrsbOzs7+jjTNLWWN4vMm0s7OyrLi6zX1hT1RpeJK3j1QsPkGcqauLe5yHhoC9vFIyOE9Rc42rr4xIOZ2Uq5WXhJqkcl+nuUtgj46DcZmEg5yTo5m0gISYpoWLZYGnvXJ7a0VghHhmV2+ZnpKJjX+Nq59UZIyyvG57aXCTrsW/knJgU1RYh5KKtJ9wiYiuvG2Ahp67x83Osn5lUkdQXo6VobigjW2nvGNqi5y9y8/RyZhwXU5FVGaPmLioj2Knu11zjYqHfpazwr+BZEw1MlxzkqWsn3WsvFuJjFOBpJGCmsysYkdKQDdYfJK0tomtvWiTgl+Spambj6vPkWJQMB4wQ2eCi5GvvX6Uj2N1iKrLrX/Bx1UtJE4kOzo8anOuu3eUkD0/NyR+p4Ws1a5XR005Kjo8TnSrv3qXmGh5kYfAxIN8mazCglpNMDo1QWarvX6Ynn6Ap7e8qGtwqcbOy5RcNz87PleovYSQoIZuh6CuppSvyMW7wsiTSTteeXatvnSBnIlqbYyhrJZ2g6K6zMu+eT97fXKrvWBwk41yY3eQoqCXorPLzMfClThle3Gru2Bqho99Z2R1jZysvMTPycK6lVJae3Crv2thb4CDcGNia3+Vp7a7tayhnpyRgm+qwXFUWpiieGtlY2NlZ2tvdXVwfYWIh2+pwqW40d/luHNqZWJfW1VOW1dxeWlbTkukwqXP1tzk6JZtYl1bWVRfmExUSjkwRmyvwqrW0KyBVEluXVpaX32ot0NJSE1Ya22rv3ZUNDQ3OjR1YFp0o7rEp2RVVFJhiHewuVE8LyUgLzFtXnKftb+2d46DWl52rpKy"
+    },
+    {
+      "name": "Valkyrie",
+      "variant": "valkyrie-hero",
+      "source": "https://cdn.royaleapi.com/static/img/cards-150/valkyrie-hero.png",
+      "sha256": "5b9f611c22078b6c917de98678f602583aaf6abaceea81cf6ce1dbc9181b8b3e",
+      "gray": "qa2uqqumo6a+n6m/9b66wKijpaqwp66qtMnQ0dHR0dS9r7rA7+C4yNXR0dHRz8q1zbajqLDLyNXByruqlpmWt9bV293TubfJrFs4Rm+skrPbs8i2m5eUzcjY5+negHGtoVA5S46Of5PX2q7JppHLy9Dk4+3rimmioFFEUZd7eIS95c6wp8DCw8zU2OXolHOjoVVWWZF6cnuR04uRo6qyvMbL0tvcn5KponF0Xpt+cnN7mol2gZqrucPIz9nMusS8olxmiqeEdG2Go7Gtgo2mt7/GzNLX5srDpF9xq5Ryc4WZoquzuKSeqrO9wMfh4cbCpGSKr45vhoyfrKersbrDyci2p9Le3rvBpGKcsJBzkGBfe62lprK+x83Ht7TJwLXCpFGbrZmCkUk3QXWVm6XJ2efZtYmZwsPCo02Mn6mWepGDXVemsmVmY3OVs8rU18HBn050k6mqlNTcyG+3w4iZlHiPrMnN1b61ok5bl36jipuiiXelx8zU2MGWq77Cw5atpVBso2aclZeObl9go8nFwrmupJacooCpn2CmrGKgl4JxYnytxc3Bta6lmZS+2J+rn1uhrn2fm3JkV2B+o7u7r6WepJTA072yoVh5rpx9q3xnX2eCpbSuppyYr665sX2mo2Z6mdbBpI1xbp21r6qhlo6Xu7iYe2ijqYqht9DMvYdyamuAioZ5cmlxsauYe2Sit7WpeY+DenNVUVZTTkxMTXqf0reaiGmhr4+dXVNWWldUSUdCPT9NerjT7OSaf26jrX2DUkNHTEtSTktMaYdhgLTH1OK6bFqernBnQztESUxKS2aWuLRkf6Ozts68aledsGRLUm1nXHKSqry5nHJsdpKsnLWpaleeqjtVWmvCysC7ubqOTU5tZG+Jprq2mm+j"
+    },
+    {
+      "name": "Wall Breakers",
+      "variant": "wall-breakers",
+      "source": "https://cdn.royaleapi.com/static/img/cards-150/wall-breakers.png",
+      "sha256": "46dfc44e2d7a8fb706b352131db465c7b420df6bf938d42f4a795732485e21e2",
+      "gray": "29eYcVJMRUcpKWF5f4Z2bGprbWxrbXCc3tiNYFNGPiwbIS00Oz5HRFdfWVZfbXJx0rZ8Z1dENSAZKzgzMy1ER0hHSE5RW1dVq49yalI+LB8iMjo2MTlGR0hJSktLS0xPeWprZkI2JB0qNDo+KkhMTUxNTU1MTE1PUlVnUjwvIyIyNzg5N0xOT1BQUFBQTk5GW2JeMy8nHy0xNTczOEZPUVFSUFBRUE01YWUrIiEdMScvNDM9WVxRSkxTWVtZVkAwVlkmExIiOCgnKys3SE5OUFFSUlNSTy80Vk8yPzlMQkNBPDExMScwOj5ESkI+Nys7ZFlIPDA+Q0VFNykqKikqKCgkHh8wRjdCQ1tUSjxYPDItKSYqKCVCOzknM0NGb2FCRk1VZ2xiQC4wPjk4ERxWVk9EMEZfWDo7TUtCdpFXHwoQNkk0BxdXWldSXFROS0hCUUmJkKxoFAoNSWwtTiBObmdva1VRTkxEWH2/lMage3KRqKOzvr2qh2qVYV1bVVFJXrO/k4i3lby6vbHc6NushIKbbWllYVtOYpykoZKIgJGMrLS1nMWTd72Tb2VfWVNIZXWCfrODQSMnUCIZSZuHnZ52bWtnY1xNZE5jn6WWXB8pMCQulKCGi6l2bmdhXVpNQT9kfHmlmz5DWFZHl6mUnHVsZmNfWlVKOD2ElpefoJWFo7zT5rCwgGxmYl5aVlJGNWd/l4uLlYGDo7nM57yiYltSSkI9OjYyWGl/nZqKgHNvfJqxzbaGPzo3NTU0MzQzUVtvrYNrlqmhnIZzw799PTo6OTk4NjMvQ0lpgpJkXGee1K6Ms91JNzEsKCUiIB8kQ0pJW3NoiqudmsGhmMhmIR8eHR0cHR4jPj86NT9/ho+iybVdRGmvHx0bGxsaGxwg"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "source_commit": "093604e9a844d1032204f866bb76f9be8458bb87",
+  "device": "cloud CPU, 2 torch threads",
+  "input": "synthetic flat image 576x1280, imgsz1024",
+  "timings_ms": [
+    568.0,
+    658.8,
+    711.3
+  ],
+  "median_ms": 658.8,
+  "classes": 393,
+  "valkyrie_classes": [
+    "valkyrie_0",
+    "valkyrie_1",
+    "valkyrie-evolution_0",
+    "valkyrie-evolution_1",
+    "valkyrie-hero_0",
+    "valkyrie-hero_1"
+  ],
+  "dart_goblin_classes": [
+    "dart-goblin_0",
+    "dart-goblin_1",
+    "dart-goblin-evolution_0",
+    "dart-goblin-evolution_1"
+  ],
+  "limitations": "load/inference benchmark only; no real screenshot accuracy, phone latency, network latency or match validation",
+  "external_suite": {
+    "passed": 192,
+    "skipped": 0,
+    "duration_seconds": 84.8
+  }
+}

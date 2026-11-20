@@ -1,0 +1,35 @@
+{
+  "version": "1.5.0-local-hypno",
+  "version_code": 10,
+  "apk_bytes": 396327057,
+  "apk_sha256": "a46f3963dad734b321577206e7a51e9c39accf76fab79f39043fdc96590ab623",
+  "abis": [
+    "arm64-v8a"
+  ],
+  "native_libraries_verified": [
+    "libonnxruntime.so",
+    "libonnxruntime4j_jni.so",
+    "libpytorch_jni_lite.so",
+    "libsherpa-onnx-jni.so",
+    "libsherpa-onnx-c-api.so",
+    "libsherpa-onnx-cxx-api.so"
+  ],
+  "model_sha256": "1d119408ef2bd23495a5771636bbb7ae2bbeda30af431b3836c18b132b119bdd",
+  "portrait_variants": 12,
+  "portrait_card_names": 8,
+  "jvm": {
+    "tests": 155,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "lint": {
+    "Error": 0,
+    "Warning": 76
+  },
+  "python_tests": 11,
+  "worker_tests": 13,
+  "phone_match_verified": false,
+  "shorts_visual_analysis": "blocked by fetch throttling and browser tunnel failure",
+  "environment": "managed Linux workspace; locally debug-signed APK"
+}

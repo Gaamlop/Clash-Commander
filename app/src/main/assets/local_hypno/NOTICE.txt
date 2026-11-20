@@ -1,0 +1,17 @@
+Clash Commander 1.5 local Hypno engine
+
+Source and reproducible model export: https://github.com/Gaamlop/Clash-Commander
+Detector checkpoint: sacha9214/clash-ai, commit 093604e9a844d1032204f866bb76f9be8458bb87
+Copyright 2026 Sacha; original code MIT. Model architecture/export: Ultralytics, AGPL-3.0.
+This combined application distribution follows AGPL-3.0; see AGPL-3.0.txt.
+Original Yoyo Studios source retains its MIT license and notices.
+
+Native self-test uses a transformed public dataset frame:
+https://github.com/wty-yy/Clash-Royale-Detection-Dataset/blob/31b4151fedb1b914e99c3c122c16dca61cb2b905/images/part2/OYASSU_20230203_episodes/2/01275.jpg
+Copyright 2024 wty, MIT. This frame may overlap detector training data and is
+used for integration/compatibility, not independent recognition accuracy.
+
+Card portrait descriptors are derived from public RoyaleAPI card illustrations.
+Source URL and SHA-256 for each are retained in portraits.json. Clash Royale
+artwork belongs to Supercell. This project is independent and not endorsed by Supercell.
+ONNX Runtime: Microsoft, MIT. Previous speech dependencies retain their notices.

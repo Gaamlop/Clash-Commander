@@ -7,13 +7,18 @@ on:
     branches:
       - main
       - master
+      - fix/autopilot-1.4.1-verified
+      - feat/hypno-local-1.5
   pull_request:
     branches:
       - main
-      - master
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -29,6 +34,46 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Python for reproducible local detector
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Restore converted local detector
+        id: local-arena-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/src/main/assets/local_hypno/arena.onnx
+            app/src/main/assets/local_hypno/arena.validation.json
+          key: local-hypno-b0c2afc3-${{ hashFiles('scripts/local_engine/**', 'app/src/main/assets/local_hypno/labels.json', 'app/src/main/assets/local_hypno/selftest.jpg') }}
+
+      - name: Export and validate bundled detector
+        if: steps.local-arena-cache.outputs.cache-hit != 'true'
+        env:
+          YOLO_OFFLINE: '1'
+          YOLO_CONFIG_DIR: /tmp/clash-yolo-config
+          OMP_NUM_THREADS: '2'
+          MKL_NUM_THREADS: '2'
+        run: |
+          python -m venv .local-model-cache/export-env
+          .local-model-cache/export-env/bin/pip install --no-cache-dir torch==2.15.0 torchvision==0.29.2 --index-url https://download.pytorch.org/whl/cpu
+          .local-model-cache/export-env/bin/pip install --no-cache-dir -r scripts/local_engine/requirements.txt
+          .local-model-cache/export-env/bin/python scripts/local_engine/export_arena.py
+
+      - name: Verify detector integrity
+        run: python scripts/local_engine/verify_bundle.py
+
+      - name: Test offline replay evaluator
+        run: python3 -m unittest discover -s scripts -p "test_replay_eval.py"
+
+      - name: Test private Gemini relay
+        run: node --test backend/worker.test.mjs
       - name: Test offline hand-slot benchmark
         run: python3 -m unittest discover -s scripts -p 'test_hand_slot_benchmark.py'
 
@@ -47,11 +92,19 @@ jobs:
         run: |
           printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
 
-      - name: Validate deck policies
-        run: ./gradlew testDebugUnitTest
+      - name: Test, lint and build APK
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug
 
-      - name: Build APK
-        run: ./gradlew assembleDebug
+      - name: Upload verification reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Clash-Commander-Verification
+          path: |
+            app/build/reports/tests/testDebugUnitTest/
+            app/build/reports/lint-results-debug.html
+            app/build/reports/lint-results-debug.xml
+          if-no-files-found: ignore
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
