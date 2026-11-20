@@ -118,7 +118,7 @@ object CommandParser {
      *  - trim
      */
     fun cleanTranscript(raw: String): String {
-        var text = raw.lowercase()
+        val text = SpanishCommands.normalize(raw)
             .replace(Regex("[^a-z0-9 ]"), "")
             .replace(Regex("\\s+"), " ")
             .trim()

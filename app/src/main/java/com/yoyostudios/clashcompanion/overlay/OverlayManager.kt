@@ -186,6 +186,12 @@ class OverlayManager(private val context: Context) {
             setOnClickListener { saveDebugFrame() }
         }
         buttonRow.addView(btnImage)
+        buttonRow.addView(Button(context).apply {
+            text = "Info"; textSize = 11f
+            minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0
+            setPadding(10, 6, 10, 6)
+            setOnClickListener { saveLocalReport() }
+        })
 
         // Close overlay button
         val btnClose = Button(context).apply {
@@ -199,6 +205,26 @@ class OverlayManager(private val context: Context) {
         buttonRow.addView(btnClose)
 
         layout.addView(buttonRow)
+
+        // The autonomous mode can be controlled without starting the microphone.
+        val tacticalRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        listOf(
+            "Defender" to { CommandRouter.handleTranscript("defend", 0) },
+            "Atacar I" to { CommandRouter.handleTranscript("push left", 0) },
+            "Atacar D" to { CommandRouter.handleTranscript("push right", 0) },
+            "Auto" to { CommandRouter.handleTranscript("autopilot", 0) },
+            "Parar" to { CommandRouter.stopAutopilot() }
+        ).forEach { (label, action) ->
+            tacticalRow.addView(Button(context).apply {
+                text = label
+                textSize = 10f
+                minWidth = 0; minimumWidth = 0
+                minHeight = 0; minimumHeight = 0
+                setPadding(8, 6, 8, 6)
+                setOnClickListener { action() }
+            })
+        }
+        layout.addView(tacticalRow)
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -305,6 +331,10 @@ class OverlayManager(private val context: Context) {
         CommandRouter.clearQueue()
         CommandRouter.clearRules()
         CommandRouter.stopAutopilot()
+        SpeechService.instance?.apply {
+            stopListening()
+            onTranscript = null
+        }
         // Remove minimized button if present
         minimizedView?.let {
             try { windowManager.removeView(it) } catch (_: Exception) {}
@@ -372,9 +402,8 @@ class OverlayManager(private val context: Context) {
             updateStatus("IMG: Disponible desde Android 10")
             return
         }
-        val frame = ScreenCaptureService.getLatestFrame()
         val snapshot = try {
-            frame?.copy(Bitmap.Config.ARGB_8888, false)
+            ScreenCaptureService.copyLatestSnapshot()?.bitmap
         } catch (e: Exception) {
             Log.w(TAG, "IMG: Failed copying screen frame: ${e.message}")
             null
@@ -412,6 +441,35 @@ class OverlayManager(private val context: Context) {
                 }
             } finally {
                 snapshot.recycle()
+            }
+        }
+    }
+
+    private fun saveLocalReport() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        thread(name = "Clash-LocalReport") {
+            try {
+                val report = com.yoyostudios.clashcompanion.local.LocalMatchTrace.snapshot()
+                check(report.isNotBlank())
+                val values = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, "ClashCommander-informe-${System.currentTimeMillis()}.zip")
+                    put(MediaStore.Downloads.MIME_TYPE, "application/zip")
+                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/ClashCommander")
+                }
+                val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                    ?: error("No report destination")
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    java.util.zip.ZipOutputStream(output).use { zip ->
+                        zip.putNextEntry(java.util.zip.ZipEntry("observations.jsonl"))
+                        zip.write(report.toByteArray())
+                        zip.closeEntry()
+                        com.yoyostudios.clashcompanion.local.LocalCaptureEvidence.appendTo(zip)
+                    }
+                }
+                    ?: error("No report stream")
+                handler.post { updateStatus("INFO: Informe guardado en Descargas/ClashCommander") }
+            } catch (error: Exception) {
+                handler.post { updateStatus("INFO: Aun no hay informe local o no se pudo guardar") }
             }
         }
     }

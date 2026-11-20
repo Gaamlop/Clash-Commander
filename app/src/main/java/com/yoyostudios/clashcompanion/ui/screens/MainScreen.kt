@@ -43,7 +43,8 @@ import androidx.compose.ui.unit.sp
 import com.yoyostudios.clashcompanion.MainActivity
 import com.yoyostudios.clashcompanion.R
 import com.yoyostudios.clashcompanion.deck.DeckManager
-import com.yoyostudios.clashcompanion.strategy.DeckProfiles
+import com.yoyostudios.clashcompanion.deck.BattleMode
+import com.yoyostudios.clashcompanion.deck.DeckPresets
 import com.yoyostudios.clashcompanion.ui.components.CrButtonGold
 import com.yoyostudios.clashcompanion.ui.components.CrCard
 import com.yoyostudios.clashcompanion.ui.components.CrCrown
@@ -58,6 +59,7 @@ fun MainScreen(activity: MainActivity) {
     val accessibilityOk by activity.accessibilityEnabled
     val micOk by activity.micGranted
     val captureOk by activity.captureRunning
+    val captureHealth by activity.captureHealth
     val speechReady by activity.speechReady
     val speechLoading by activity.speechLoading
     val deck by activity.deckCards
@@ -66,8 +68,11 @@ fun MainScreen(activity: MainActivity) {
     val opusStatus by activity.opusStatus
     val opusComplete by activity.opusComplete
     val aiStatus by activity.aiStatus
+    val voiceLanguage by activity.voiceLanguage
+    val speechError by activity.speechError
+    val battleMode by activity.battleMode
 
-    val allReady = overlayOk && accessibilityOk && micOk && captureOk && speechReady
+    val allReady = overlayOk && accessibilityOk && captureOk && deck.size == 8
 
     Box(
         modifier = Modifier
@@ -93,7 +98,7 @@ fun MainScreen(activity: MainActivity) {
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "Play Clash Royale With Your Voice",
+                text = "Voz, estrategia y Autopilot · ${com.yoyostudios.clashcompanion.BuildConfig.VERSION_NAME}",
                 style = CrTypography.bodyMedium,
                 color = CrColors.TextSecondary,
                 textAlign = TextAlign.Center
@@ -180,6 +185,7 @@ fun MainScreen(activity: MainActivity) {
                         step = 5,
                         name = "Screen Capture",
                         ready = captureOk,
+                        clickableWhenReady = true,
                         onClick = { activity.startScreenCapture() }
                     )
                     ChecklistDivider()
@@ -189,6 +195,92 @@ fun MainScreen(activity: MainActivity) {
                         ready = speechReady,
                         loading = speechLoading,
                         onClick = { activity.startSpeechService() }
+                    )
+                    Text(
+                        captureHealth, style = CrTypography.labelSmall, color = CrColors.TextSecondary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+            }
+
+            if (speechError != null) {
+                Text(
+                    text = speechError ?: "",
+                    color = CrColors.Error,
+                    style = CrTypography.bodyMedium,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            CrCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Idioma de voz", style = CrTypography.titleMedium, color = CrColors.TextGold)
+                    SelectionRow(
+                        options = listOf("Español" to "es", "English" to "en"),
+                        selected = voiceLanguage,
+                        onSelect = activity::selectVoiceLanguage
+                    )
+                    Text(
+                        "La voz es opcional. También puedes defender, atacar y activar Auto desde el panel flotante.",
+                        style = CrTypography.labelSmall, color = CrColors.TextSecondary
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+            CrCard(modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Modo de partida", style = CrTypography.titleMedium, color = CrColors.TextGold)
+                    SelectionRow(
+                        options = BattleMode.entries.map { it.label to it.name },
+                        selected = battleMode.name,
+                        onSelect = { name -> activity.selectBattleMode(BattleMode.valueOf(name)) }
+                    )
+                    Text("Mazos de Autopilot", style = CrTypography.titleMedium, color = CrColors.TextGold)
+                    com.yoyostudios.clashcompanion.strategy.DeckProfiles.all.forEach { profile ->
+                        Text(
+                            "Preparar: ${profile.displayName}",
+                            style = CrTypography.bodyMedium, color = CrColors.TextGold,
+                            modifier = Modifier.fillMaxWidth().clickable { activity.prepareProfile(profile) }
+                                .padding(vertical = 8.dp)
+                        )
+                    }
+                    Text("Otros mazos para Smart y voz", style = CrTypography.titleMedium, color = CrColors.TextGold)
+                    Text(
+                        "Variantes consultadas el ${DeckPresets.CHECKED_ON}. Datos de jugadores de ranked; " +
+                            "su rendimiento con esta IA aún no está medido en desafíos ni ranked.",
+                        style = CrTypography.labelSmall, color = CrColors.TextSecondary
+                    )
+                    DeckPresets.all.forEach { preset ->
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "Preparar: ${preset.name}",
+                                style = CrTypography.bodyMedium,
+                                color = if (DeckPresets.matching(deck.map { it.id })?.id == preset.id)
+                                    CrColors.Green else CrColors.TextGold,
+                                modifier = Modifier.fillMaxWidth().clickable { activity.preparePreset(preset) }
+                                    .padding(vertical = 6.dp)
+                            )
+                            Text(
+                                "Evoluciones: ${preset.evolutions.joinToString()}",
+                                style = CrTypography.labelSmall, color = CrColors.TextSecondary
+                            )
+                            Text(
+                                "Ver composición y fuente ↗", style = CrTypography.labelSmall,
+                                color = CrColors.Cyan,
+                                modifier = Modifier.clickable {
+                                    activity.startActivity(android.content.Intent(
+                                        android.content.Intent.ACTION_VIEW, android.net.Uri.parse(preset.sourceUrl)
+                                    ))
+                                }.padding(vertical = 4.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        "Preparar aquí no cambia el mazo del juego. Equipa las mismas 8 cartas y evoluciones " +
+                            "en Clash Royale; también puedes compartir tu propio mazo.",
+                        style = CrTypography.labelSmall, color = CrColors.TextSecondary
                     )
                 }
             }
@@ -223,7 +315,7 @@ fun MainScreen(activity: MainActivity) {
             CrCard(modifier = Modifier.fillMaxWidth().clickable { activity.openAiSettings() }) {
                 Column {
                     Text(
-                        text = "GEMINI AUTOPILOT",
+                        text = "GEMINI · SMART Y OTROS MAZOS",
                         style = CrTypography.titleMedium,
                         color = CrColors.TextGold
                     )
@@ -235,10 +327,15 @@ fun MainScreen(activity: MainActivity) {
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Toca para configurar o cambiar la conexion segura",
+                        text = "Auto Hypno funciona localmente. Toca para configurar Gemini opcional.",
                         style = CrTypography.labelSmall,
                         color = CrColors.TextSecondary
                     )
+                    if (deck.size == 8) {
+                        androidx.compose.material3.TextButton(onClick = { activity.requestRemoteDeckAnalysis() }) {
+                            Text("Analizar mazo con Gemini", color = CrColors.TextGold)
+                        }
+                    }
                 }
             }
 
@@ -271,12 +368,13 @@ private fun ChecklistRow(
     name: String,
     ready: Boolean,
     loading: Boolean = false,
+    clickableWhenReady: Boolean = false,
     onClick: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (!ready && !loading) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(if ((!ready || clickableWhenReady) && !loading) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -330,6 +428,24 @@ private fun ChecklistRow(
             },
             fontSize = 12.sp
         )
+    }
+}
+
+@Composable
+private fun SelectionRow(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        options.forEach { (label, value) ->
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (selected == value) CrColors.GoldDark else CrColors.TealBorder,
+                modifier = Modifier.weight(1f).clickable { onSelect(value) }
+            ) {
+                Text(
+                    label, color = CrColors.TextPrimary, style = CrTypography.labelSmall,
+                    textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 4.dp, vertical = 10.dp)
+                )
+            }
+        }
     }
 }
 
@@ -410,16 +526,14 @@ private fun DeckCard(
             }
 
             Spacer(modifier = Modifier.height(6.dp))
-            val profile = DeckProfiles.matchNames(cards.map { it.name })
+
+            val selectedProfile = com.yoyostudios.clashcompanion.strategy.DeckProfiles.matchNames(cards.map { it.name })
             Text(
-                text = if (profile != null) "PERFIL: ${profile.displayName}"
-                    else "AUTOPILOT: Disponible solo para los 3 mazos seleccionados",
-                style = CrTypography.labelSmall,
-                color = if (profile != null) CrColors.TextGold else CrColors.Error,
-                modifier = Modifier.fillMaxWidth()
+                text = selectedProfile?.let { "PERFIL: ${it.displayName}" }
+                    ?: "Autopilot: importa uno de los tres mazos seleccionados",
+                style = CrTypography.labelSmall, color = CrColors.TextGold
             )
             Spacer(modifier = Modifier.height(8.dp))
-
             // Card grid: two rows of 4, tight spacing
             val topRow = cards.take(4)
             val bottomRow = cards.drop(4)

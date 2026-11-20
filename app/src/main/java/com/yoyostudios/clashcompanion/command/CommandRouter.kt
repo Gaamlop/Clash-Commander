@@ -1,10 +1,8 @@
 package com.yoyostudios.clashcompanion.command
 
 import android.graphics.Bitmap
-import android.os.Handler
-import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
-import com.google.gson.JsonParser
 import com.yoyostudios.clashcompanion.accessibility.ClashCompanionAccessibilityService
 import com.yoyostudios.clashcompanion.api.AiConnection
 import com.yoyostudios.clashcompanion.api.GeminiClient
@@ -15,9 +13,9 @@ import com.yoyostudios.clashcompanion.detection.ArenaDetector
 import com.yoyostudios.clashcompanion.detection.HandDetector
 import com.yoyostudios.clashcompanion.overlay.OverlayManager
 import com.yoyostudios.clashcompanion.strategy.OpusCoach
-import com.yoyostudios.clashcompanion.strategy.DeckProfiles
 import com.yoyostudios.clashcompanion.util.Coordinates
 import kotlinx.coroutines.*
+import com.yoyostudios.clashcompanion.local.*
 
 /**
  * Routes parsed commands to execution across five tiers:
@@ -45,16 +43,25 @@ object CommandRouter {
         "Knight", "Archers", "Minions", "Arrows",
         "Fireball", "Giant", "Musketeer", "Mini P.E.K.K.A"
     )
+        set(value) {
+            field = value.toList()
+            cancelPendingDecision()
+            cancelPendingGesture()
+            resetLastPlayed()
+        }
 
     /** Prevents rapid-fire double plays during tap animation */
     private var isBusy = false
+    private var isGestureInFlight = false
+    private var gestureRevision = 0L
+    private var decisionRevision = 0L
+    private var activeDecisionJob: Job? = null
+    private var lastObservedMatchSession = -1L
 
     // ── Last Played Tracking (for "follow up" lane coherence) ──────────
     private var lastPlayedCard: String? = null
     private var lastPlayedZone: String? = null
     private var lastPlayedTimeMs: Long = 0L
-
-    private val handler = Handler(Looper.getMainLooper())
 
     // Coroutine scope for Smart Path and Autopilot async calls
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -66,6 +73,10 @@ object CommandRouter {
         private set
 
     private var autopilotJob: Job? = null
+    private val localSession = LocalAutopilotSession()
+    private var localAutopilot = false
+    private var lastLocalStatus = ""
+    private var lastLocalLoggedFrame: Pair<Long, Long>? = null
 
     /** Autopilot decision interval in milliseconds */
     private const val AUTOPILOT_INTERVAL_MS = 4000L
@@ -157,9 +168,10 @@ object CommandRouter {
             return
         }
 
-        // Guard: don't fire while previous tap is animating.
-        // Exception: when autopilot is active, user voice commands always take priority.
-        if (isBusy && !isAutopilot) {
+        localSession.manualOverride(SystemClock.elapsedRealtime())
+        // A human instruction supersedes an AI request, while the auto loop can resume later.
+        cancelPendingDecision()
+        if (isGestureInFlight) {
             Log.d(TAG, "CMD: Busy, skipping '$transcript'")
             overlay?.updateStatus("Wait...")
             return
@@ -271,156 +283,193 @@ object CommandRouter {
         sttLatencyMs: Long,
         rawTranscript: String
     ) {
-        // If parser found a card but no zone (5+ elixir), ask for zone instead of LLM
         if (cmd.card.isNotEmpty() && cmd.zone == null) {
-            val msg = "Where? Say '${cmd.card} left/right/center'"
-            overlay?.updateStatus(msg)
-            Log.i(TAG, "CMD: $msg")
+            overlay?.updateStatus("Where? Say '${cmd.card} left/right/center'")
             return
         }
+        launchDecision(rawTranscript, sttLatencyMs, autonomous = false)
+    }
 
+    /** Invalidates responses independently of the periodic auto loop. Main thread only. */
+    private fun cancelPendingDecision() {
+        decisionRevision++
+        activeDecisionJob?.cancel()
+        activeDecisionJob = null
+        isBusy = isGestureInFlight
+    }
+
+    private fun resetLastPlayed() {
+        lastPlayedCard = null
+        lastPlayedZone = null
+        lastPlayedTimeMs = 0L
+    }
+
+    private fun cancelPendingGesture() {
+        gestureRevision++
+        ClashCompanionAccessibilityService.instance?.cancelPendingGestures()
+        isGestureInFlight = false
+        isBusy = activeDecisionJob?.isActive == true
+        overlay?.setPassthrough(false)
+    }
+
+    private fun deckKey(): String = DeckManager.currentDeck.map { it.id }.sorted().joinToString(",")
+
+    private fun decisionIsCurrent(context: AiDecisionContext): Boolean {
+        val latest = ScreenCaptureService.getCaptureMetadata()
+        return AiDecisionPolicy.isCurrent(
+            context, decisionRevision, SystemClock.elapsedRealtime(),
+            ScreenCaptureService.currentCaptureSessionId(), latest?.frameId,
+            HandDetector.matchSessionId, deckKey()
+        ) && HandDetector.hasReliableHand(2) && !isGestureInFlight
+    }
+
+    private fun launchDecision(
+        userCommand: String,
+        sttLatencyMs: Long,
+        autonomous: Boolean
+    ): Job? {
         if (!AiConnection.isConfigured()) {
             overlay?.updateStatus("Configura Gemini en Clash Commander")
-            Log.w(TAG, "CMD: SMART path skipped — no GEMINI_API_KEY")
-            return
+            return null
         }
-
-        if (!HandDetector.hasReliableHand(2)) {
-            overlay?.updateStatus("SMART: Mano sin detectar. Pulsa Img y revisa captura")
-            return
+        if (DeckManager.currentDeck.size != 8) {
+            overlay?.updateStatus("IA: Comparte el mazo actual de 8 cartas desde el juego")
+            return null
         }
-
+        if (GeminiClient.cooldownRemainingMs > 0) {
+            showProviderCooldown(if (autonomous) "AUTO" else "SMART")
+            return null
+        }
+        if (isGestureInFlight || !HandDetector.hasReliableHand(2)) {
+            overlay?.updateStatus("AUTO: Reintentando reconocimiento de mano (minimo 2 cartas)")
+            return null
+        }
+        cancelPendingDecision()
+        val snapshot = ScreenCaptureService.copyLatestSnapshot() ?: run {
+            overlay?.updateStatus("IA: Captura no disponible; no tocar")
+            return null
+        }
+        val metadata = snapshot.metadata
+        val matchSession = HandDetector.matchSessionId
+        if (lastObservedMatchSession != matchSession) {
+            resetLastPlayed()
+            lastObservedMatchSession = matchSession
+        }
+        val context = AiDecisionContext(
+            decisionRevision, SystemClock.elapsedRealtime(), metadata.frameId,
+            metadata.capturedAtElapsedRealtime, metadata.captureSessionId,
+            matchSession, deckKey()
+        )
+        val systemPrompt = buildSmartPrompt()
+        val label = if (autonomous) "AUTO" else "SMART"
         isBusy = true
-        val startMs = System.currentTimeMillis()
-        overlay?.updateStatus("SMART: Thinking...")
-        Log.i(TAG, "CMD: SMART path — calling Gemini Flash for '$rawTranscript'")
-
-        scope.launch {
+        overlay?.updateStatus("$label: Analizando partida...")
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
-                val result = withContext(Dispatchers.IO) {
-                    val systemPrompt = buildSmartPrompt()
-                    val userMessage = rawTranscript
-
-                    // Use Gemini Vision for defense calls when possible.
-                    // This dramatically improves lane selection and timing without Roboflow.
-                    if (wantsDefenseVision(userMessage)) {
-                        val arenaImg = captureArenaImageBase64()
-                        if (arenaImg != null) {
-                            GeminiClient.chatWithImages(
-                                systemInstruction = systemPrompt,
-                                userText = "ARENA IMAGE PROVIDED. Use it to identify enemy threats and defend NOW.\n\n$userMessage",
-                                images = listOf(arenaImg),
-                                maxTokens = 256,
-                                jsonMode = true
-                            )
-                        } else {
-                            GeminiClient.chat(
-                                systemInstruction = systemPrompt,
-                                userMessage = userMessage,
-                                maxTokens = 256,
-                                jsonMode = true
-                            )
+                val result = withTimeout(AiDecisionPolicy.MAX_AGE_MS) {
+                    val images = withContext(Dispatchers.Default) {
+                        val arena = captureArenaImageBase64(snapshot.bitmap)
+                            ?: throw IllegalStateException("No hay imagen de arena valida")
+                        val hud = captureHudImageBase64(snapshot.bitmap)
+                            ?: throw IllegalStateException("No hay imagen del HUD valida")
+                        listOf(arena, hud)
+                    }
+                    GeminiClient.chatWithImages(
+                        systemInstruction = systemPrompt,
+                        userText = if (autonomous) {
+                            "AUTOPILOT: Choose a safe action from the verified hand and arena image. " +
+                                "Defend immediate threats, then consider attacking or counterpushing. " +
+                                "Read observed_elixir ONLY if legible in image 2 (own bottom HUD); " +
+                                "otherwise return wait with observed_elixir null. " +
+                                "Return wait when evidence is unclear or no safe play is available."
+                        } else userCommand,
+                        images = images,
+                        maxTokens = 256,
+                        jsonMode = true
+                    )
+                }
+                ensureActive()
+                Log.i(TAG, "$label: decisionLatencyMs=${SystemClock.elapsedRealtime() - context.requestedAtElapsedRealtime}")
+                if (!decisionIsCurrent(context)) {
+                    overlay?.updateStatus("$label: Situacion cambiada; decision descartada")
+                    return@launch
+                }
+                when (val decision = AiDecisionPolicy.parse(GeminiClient.cleanJsonResponse(result))) {
+                    is TacticalDecision.Wait -> {
+                        overlay?.updateStatus("$label: Esperar | ${decision.reasoning}")
+                    }
+                    is TacticalDecision.Play -> {
+                        val card = resolveCardName(decision.card)
+                        val zone = resolveZoneName(decision.zone)
+                        if (card == null || zone == null || !HandDetector.cardToSlot.containsKey(card)) {
+                            overlay?.updateStatus("$label: Carta o zona no verificadas; no tocar")
+                            return@launch
                         }
-                    } else {
-                        GeminiClient.chat(
-                            systemInstruction = systemPrompt,
-                            userMessage = userMessage,
-                            maxTokens = 256,
-                            jsonMode = true
+                        val cardInfo = DeckManager.currentDeck.firstOrNull { it.name == card }
+                        if (cardInfo == null || !AiDecisionPolicy.isLegalPlacement(card, cardInfo.type, zone)) {
+                            overlay?.updateStatus("$label: Posicion no permitida para esa carta; esperar")
+                            return@launch
+                        }
+                        val cost = cardInfo.elixir.takeIf { it in 0..10 && card != "Mirror" }
+                        if (!AiDecisionPolicy.canAfford(cost, decision.observedElixir, autonomous)) {
+                            overlay?.updateStatus("$label: Elixir insuficiente o no legible; esperar")
+                            return@launch
+                        }
+                        if (autonomous) {
+                            val rejection = ArchetypePolicy.rejection(deckCards.toSet(), card, zone,
+                                decision.observedElixir, decision.board)
+                            if (rejection != null) {
+                                overlay?.updateStatus("AUTO: Esperar | $rejection")
+                                return@launch
+                            }
+                        }
+                        // AI decisions are never silently queued for a different board state.
+                        overlay?.updateStatus("$label: $card -> $zone | ${decision.reasoning}")
+                        executeFastPath(
+                            CommandParser.ParsedCommand(
+                                tier = CommandTier.FAST, card = card, zone = zone,
+                                confidence = 1.0f,
+                                rawTranscript = "${if (autonomous) "AUTOPILOT" else "SMART"}: ${decision.reasoning}"
+                            ),
+                            parseMs = SystemClock.elapsedRealtime() - context.requestedAtElapsedRealtime,
+                            sttLatencyMs = sttLatencyMs
                         )
                     }
                 }
-
-                val elapsed = System.currentTimeMillis() - startMs
-                Log.i(TAG, "CMD: SMART response in ${elapsed}ms: ${result.take(200)}")
-
-                // Parse JSON response
-                val cleanJson = GeminiClient.cleanJsonResponse(result)
-                val json = JsonParser.parseString(cleanJson).asJsonObject
-
-                val action = json.get("action")?.asString ?: "wait"
-                val reasoning = json.get("reasoning")?.asString ?: ""
-
-                if (action == "wait") {
-                    val msg = "SMART: Wait | $reasoning | ${elapsed}ms"
-                    overlay?.updateStatus(msg)
-                    Log.i(TAG, "CMD: $msg")
-                    isBusy = false
-                    return@launch
+            } catch (error: TimeoutCancellationException) {
+                if (context.revision == decisionRevision) {
+                    overlay?.updateStatus("$label: Gemini tardo mas de 6 s; reintentando automaticamente")
+                    Log.i(TAG, "$label: timeoutMs=${SystemClock.elapsedRealtime() - context.requestedAtElapsedRealtime}")
                 }
-
-                // action == "play"
-                val card = json.get("card")?.asString ?: ""
-                val zone = json.get("zone")?.asString ?: ""
-
-                if (card.isBlank() || zone.isBlank()) {
-                    overlay?.updateStatus("SMART: Bad response ($reasoning)")
-                    Log.w(TAG, "CMD: SMART returned empty card/zone: $cleanJson")
-                    isBusy = false
-                    return@launch
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                if (context.revision == decisionRevision) {
+                    if (GeminiClient.cooldownRemainingMs > 0) {
+                        showProviderCooldown(label)
+                        return@launch
+                    }
+                    val cause = if (error is com.yoyostudios.clashcompanion.api.GeminiHttpException)
+                        "Gemini HTTP ${error.statusCode}" else "respuesta no valida (${error.javaClass.simpleName})"
+                    overlay?.updateStatus("$label: $cause; reintentando")
+                    Log.w(TAG, "$label: Decision failed (${error.javaClass.simpleName})")
                 }
-
-                // Resolve card name (Gemini may return slightly different casing)
-                val resolvedCard = resolveCardName(card)
-                if (resolvedCard == null) {
-                    overlay?.updateStatus("SMART: Unknown card '$card'")
-                    Log.w(TAG, "CMD: SMART returned unknown card: $card")
-                    isBusy = false
-                    return@launch
+            } finally {
+                if (context.revision == decisionRevision) {
+                    activeDecisionJob = null
+                    isBusy = isGestureInFlight
                 }
-
-                // Resolve zone (Gemini returns zone keys like "center", "left_bridge")
-                val resolvedZone = resolveZoneName(zone)
-                if (resolvedZone == null) {
-                    overlay?.updateStatus("SMART: Unknown zone '$zone'")
-                    Log.w(TAG, "CMD: SMART returned unknown zone: $zone")
-                    isBusy = false
-                    return@launch
-                }
-
-                // Never queue a speculative card when our live camera has lost the hand.
-                if (!HandDetector.hasReliableHand(2)) {
-                    overlay?.updateStatus("SMART: Captura de mano perdida; jugada cancelada")
-                    isBusy = false
-                    return@launch
-                }
-
-                // Check card is in hand
-                if (!HandDetector.cardToSlot.containsKey(resolvedCard)) {
-                    // Auto-queue if not in hand
-                    commandQueue.add(QueuedCommand(resolvedCard, resolvedZone))
-                    val msg = "SMART: $resolvedCard not in hand, queued | $reasoning | ${elapsed}ms"
-                    overlay?.updateStatus(msg)
-                    Log.i(TAG, "CMD: $msg")
-                    isBusy = false
-                    return@launch
-                }
-
-                // Execute!
-                val msg = "SMART: $resolvedCard -> $resolvedZone | $reasoning | ${elapsed}ms"
-                overlay?.updateStatus(msg)
-                Log.i(TAG, "CMD: $msg")
-
-                // isBusy will be released by executeFastPath's handler.postDelayed
-                executeFastPath(
-                    CommandParser.ParsedCommand(
-                        tier = CommandTier.FAST,
-                        card = resolvedCard,
-                        zone = resolvedZone,
-                        confidence = 1.0f,
-                        rawTranscript = "SMART: $reasoning"
-                    ),
-                    parseMs = elapsed,
-                    sttLatencyMs = sttLatencyMs
-                )
-            } catch (e: Exception) {
-                val elapsed = System.currentTimeMillis() - startMs
-                val msg = "SMART: Error (${elapsed}ms) ${e.message?.take(40)}"
-                overlay?.updateStatus(msg)
-                Log.e(TAG, "CMD: $msg", e)
-                isBusy = false
             }
         }
+        job.invokeOnCompletion { snapshot.bitmap.recycle() }
+        activeDecisionJob = job
+        job.start()
+        return job
+    }
+
+    private fun showProviderCooldown(label: String) {
+        val seconds = (GeminiClient.cooldownRemainingMs + 999) / 1_000
+        overlay?.updateStatus("$label: Gemini limitado (429); pausa ${seconds}s. Sin jugadas IA")
     }
 
     /**
@@ -428,27 +477,19 @@ object CommandRouter {
      */
     private fun buildSmartPrompt(): String {
         val deckJson = DeckManager.getDeckJson()
-        val archetypePlan = DeckProfiles.promptFor(deckCards)
 
-        val playbook = OpusCoach.playbookFor(DeckManager.currentDeck)
-        val playbookSection = if (!playbook.isNullOrBlank()) {
-            "STRATEGIC PLAYBOOK (from deep analysis):\n$playbook"
-        } else {
-            "STRATEGIC PLAYBOOK: Not available. Use general Clash Royale knowledge."
-        }
+        val playbookSection = TacticalPromptBrief.fromPlaybook(
+            OpusCoach.cachedPlaybook, HandDetector.currentVerifiedHand.filterKeys { it in 0..3 }.values.toSet()
+        )
 
-        // Strategy must reason from cards actually seen in this frame, not
-        // older entries retained only for overlay display smoothing.
-        val handCards = HandDetector.cardToSlot.keys.joinToString(", ")
+        val hand = HandDetector.currentVerifiedHand
+        val handCards = (0..3).mapNotNull { hand[it] }.joinToString(", ")
         val ownElixir = HandDetector.ownElixir
         val elixirSection = if (ownElixir != null) {
-            "OWN ELIXIR: $ownElixir / 10 (observed in latest game capture). " +
-                "Only propose a card whose actual cost fits available elixir."
-        } else {
-            "OWN ELIXIR: UNKNOWN (bar unverified); do not invent a numeric value."
-        }
+            "LOCAL OWN ELIXIR: $ownElixir / 10 (experimental conservative bar estimate; verify HUD)."
+        } else "LOCAL OWN ELIXIR: UNKNOWN; read the HUD and never invent a value."
         val handSection = if (handCards.isNotBlank()) {
-            "CURRENT HAND (cards available to play RIGHT NOW): $handCards"
+            "CURRENT HAND (visually identified; affordability UNKNOWN): $handCards"
         } else {
             "CURRENT HAND: Unknown (hand detection not ready)"
         }
@@ -459,86 +500,85 @@ object CommandRouter {
         // Last played context for "follow up" lane coherence
         val lastPlayedSection = if (lastPlayedCard != null && lastPlayedTimeMs > 0) {
             val agoSec = (System.currentTimeMillis() - lastPlayedTimeMs) / 1000
-            "\nLAST PLAYED: $lastPlayedCard at $lastPlayedZone (${agoSec}s ago)"
+            "\nLAST PLAY ATTEMPT (both taps completed; deployment unconfirmed): $lastPlayedCard at $lastPlayedZone (${agoSec}s ago)"
         } else ""
 
         return """You are a real-time Clash Royale tactical AI. Speed is critical — be decisive.
 
 DECK: $deckJson
-$archetypePlan
+${DeckManager.tacticalContext()}
 $playbookSection
 $handSection
 $elixirSection
 $arenaSection$lastPlayedSection
+${ArchetypePolicy.guidance(deckCards.toSet())}
+ELIXIR SENSOR: Not available. Card costs are metadata, not available elixir.
+IMAGE 1: cropped arena. IMAGE 2: bottom HUD from the SAME captured frame.
+Read your available elixir ONLY from the own purple elixir gauge/digit in IMAGE 2.
+Do not confuse purple cost gems on individual cards with available elixir.
+Set observed_elixir to an integer 0..10 ONLY if that gauge is clearly legible; otherwise null.
+This reading is a visual inference, not a verified sensor. Never invent an amount.
 
-VALID ZONES: left_bridge, right_bridge, center, behind_left, behind_right, back_center, front_left, front_right
+Report immediate_threat as true/false ONLY when observable, otherwise null.
+Report threat_lane as left/right only for an observed immediate threat, otherwise null.
+Report enemy_tower_occupied as true ONLY when visible defenders occupy the proposed spell target.
+These are visual inferences, never facts supplied by a calibrated sensor.
+VALID ZONES: left_bridge, right_bridge, center, behind_left, behind_right, back_center, front_left, front_right, left tower, right tower
 
 If an ARENA screenshot image is provided, use it as ground truth for threats and lane selection.
 Orientation: YOUR side is the BOTTOM of the screen. ENEMY side is the TOP.
 
 Rules:
 - ONLY suggest cards in CURRENT HAND.
-- When user says "defend" or "defense": ALWAYS play a defensive card immediately. Trust the user. Use ARENA STATE and/or the arena screenshot to find the most urgent enemy threat (closest to your towers) and choose the correct lane (left/right). If the threat is already on your side or about to cross, place closer (front_left/front_right/center). If the threat is further away, you can place behind_left/behind_right for a stronger counterpush. Buildings (if in deck) prefer center to pull. Troops MAY also be placed at center when needed to pull (e.g., Hog Rider).
-- When user says "push left" or "push right": play an offensive card at that bridge. Prefer win condition (Giant), then support troops (Musketeer, Archers), then cycle cards.
-- When user says "follow up": support LAST PLAYED card in the SAME LANE. Use playbook synergies (e.g. Giant + Musketeer, Giant + Archers). If last played was at left, play support at left. Never cross lanes for follow-up.
-- When user says "suggest" or gives a vague command: consider defense first, then a favorable safe play; WAIT if neither is justified.
+- When user says "defend" or "defense": prioritize a defensive play ONLY when the arena image supports it; otherwise wait. Use ARENA STATE and/or the arena screenshot to find the most urgent enemy threat (closest to your towers) and choose the correct lane (left/right). If the threat is already on your side or about to cross, place closer (front_left/front_right/center). If the threat is further away, you can place behind_left/behind_right for a stronger counterpush. Buildings (if in deck) prefer center to pull. Troops MAY also be placed at center when needed to pull (e.g., Hog Rider).
+- When user says "push left" or "push right": choose an offensive action in that lane using the actual deck win condition, support, and archetype plan. Most troops enter from your side; Graveyard and suitable offensive spells may target the enemy tower. Wait if there is no safe attack.
+- When user says "follow up": support LAST PLAYED card in the SAME LANE. Use synergies from this deck playbook; do not assume any default cards. If last played was at left, play support at left. Never cross lanes for follow-up.
+- When user says "suggest" or gives a vague command: pick the best offensive play from current hand.
 - For ambiguous commands: safest positive-elixir-trade play.
 - Buildings go in "center" or "behind_left"/"behind_right".
-- WAIT when no observed card is affordable, the hand is uncertain, the arena is unreadable, or the trade is unfavorable. Never invent an enemy threat just to play a card.
-- Do not recommend a card when its known elixir cost exceeds observed own elixir.
+- "left tower" and "right tower" are ENEMY princess towers. Use them only for cards legally deployable there (such as Graveyard or suitable spells), never for ordinary troops or buildings. Do not waste area spells on empty ground or your own towers.
+- Return "wait" whenever the image is unclear, the hand is uncertain, or no safe play is justified. Never force a play.
+- If observed_elixir is known, never choose a card whose cost exceeds it. If it is null, prefer wait; AUTOPILOT must wait. A manual defense request can suggest a conservative play without claiming affordability.
+- This applies equally to defense, attack, and AUTOPILOT. A user command never overrides uncertain visual evidence.
 
-Respond ONLY with JSON: {"action":"play","card":"<exact card name>","zone":"<zone_key>","reasoning":"<15 words max>"}
-Or when waiting is strategically safer: {"action":"wait","reasoning":"<15 words max>"}"""
+Respond ONLY with JSON: {"action":"play","card":"<exact card name>","zone":"<zone_key>","observed_elixir":<integer 0..10 or null>,"immediate_threat":<boolean or null>,"threat_lane":<"left" or "right" or null>,"enemy_tower_occupied":<boolean or null>,"reasoning":"<15 words max>"}
+Or when waiting is safer: {"action":"wait","observed_elixir":null,"reasoning":"<15 words max>"}"""
     }
 
-    private fun wantsDefenseVision(text: String): Boolean {
-        val t = text.lowercase()
-        return t.contains("defend") || t.contains("defense") || t.contains("defence")
+    /** Encode the owned snapshot used by this exact decision, with a resolution-scaled ROI. */
+    private fun captureArenaImageBase64(frame: Bitmap): String? {
+        val roi = Coordinates.getArenaROI(frame.width, frame.height) ?: return null
+        return encodeImageCrop(frame, roi, VISION_ARENA_TARGET_W, VISION_ARENA_JPEG_QUALITY)
     }
 
-    /**
-     * Capture an arena screenshot suitable for Gemini vision.
-     *
-     * Returns a base64 JPEG (no data: prefix) or null if capture fails.
-     */
-    private fun captureArenaImageBase64(): String? {
-        val frame = ScreenCaptureService.getLatestFrame()
-        if (frame == null || frame.isRecycled) return null
+    /** Preserve HUD digits at higher quality without sending an unrelated second frame. */
+    private fun captureHudImageBase64(frame: Bitmap): String? {
+        val top = (frame.height * 0.82f).toInt()
+        val roi = Coordinates.CardSlotROI(0, top, frame.width, frame.height - top)
+        return encodeImageCrop(frame, roi, targetWidthLimit = 720, quality = 85)
+    }
 
-        // Copy immediately to avoid ScreenCaptureService recycling races.
-        val safeCopy = try {
-            frame.copy(Bitmap.Config.ARGB_8888, false)
-        } catch (e: Exception) {
-            Log.w(TAG, "CMD: Arena frame copy failed: ${e.message}")
+    private fun encodeImageCrop(
+        frame: Bitmap, roi: Coordinates.CardSlotROI, targetWidthLimit: Int, quality: Int
+    ): String? {
+        var crop: Bitmap? = null
+        var scaled: Bitmap? = null
+        return try {
+            val cropped = Bitmap.createBitmap(frame, roi.x, roi.y, roi.w, roi.h)
+            crop = cropped
+            val targetWidth = minOf(targetWidthLimit, cropped.width)
+            val targetHeight = (cropped.height.toFloat() * targetWidth / cropped.width).toInt().coerceAtLeast(1)
+            val encodedBitmap = if (cropped.width != targetWidth) {
+                Bitmap.createScaledBitmap(cropped, targetWidth, targetHeight, true)
+            } else cropped
+            scaled = encodedBitmap
+            GeminiClient.bitmapToBase64(encodedBitmap, quality = quality)
+        } catch (error: Exception) {
+            Log.w(TAG, "CMD: Arena image encoding failed (${error.javaClass.simpleName})")
             null
-        } ?: return null
-
-        try {
-            val top = Coordinates.ARENA_CROP_TOP
-            val bottom = Coordinates.ARENA_CROP_BOTTOM
-            val height = bottom - top
-            if (top < 0 || height <= 0 || top + height > safeCopy.height) return null
-
-            val crop = Bitmap.createBitmap(safeCopy, 0, top, safeCopy.width, height)
-
-            val targetW = VISION_ARENA_TARGET_W
-            val targetH = (crop.height.toFloat() * (targetW.toFloat() / crop.width.toFloat())).toInt()
-                .coerceAtLeast(1)
-            val scaled = if (crop.width != targetW) {
-                Bitmap.createScaledBitmap(crop, targetW, targetH, true)
-            } else {
-                crop
-            }
-            if (scaled !== crop) crop.recycle()
-
-            val base64 = GeminiClient.bitmapToBase64(scaled, quality = VISION_ARENA_JPEG_QUALITY)
-            scaled.recycle()
-            return base64
-        } catch (e: Exception) {
-            Log.w(TAG, "CMD: Arena image capture failed: ${e.message}")
-            return null
         } finally {
-            safeCopy.recycle()
+            scaled?.takeIf { it !== frame && it !== crop }?.recycle()
+            crop?.takeIf { it !== frame }?.recycle()
         }
     }
 
@@ -558,30 +598,17 @@ Or when waiting is strategically safer: {"action":"wait","reasoning":"<15 words 
 
     /**
      * Resolve a card name from Gemini response to exact deck card name.
-     * Handles case mismatches and minor variations.
+     * Case is harmless; fuzzy matching could turn a hallucinated name into another card.
      */
     private fun resolveCardName(geminiCard: String): String? {
-        // Exact match
-        deckCards.find { it.equals(geminiCard, ignoreCase = true) }?.let { return it }
-
-        // Fuzzy match against deck
-        val match = CommandParser.matchCard(geminiCard.lowercase(), deckCards)
-        return if (match != null && match.second > 0.6f) match.first else null
+        return deckCards.find { it.equals(geminiCard.trim(), ignoreCase = true) }
     }
 
     /**
      * Resolve a zone name from Gemini response to a valid ZONE_MAP key.
      */
     private fun resolveZoneName(geminiZone: String): String? {
-        val zone = geminiZone.lowercase().trim()
-        // Direct match
-        if (Coordinates.ZONE_MAP.containsKey(zone)) return zone
-        // Try with underscores replaced by spaces and vice versa
-        val withSpaces = zone.replace("_", " ")
-        if (Coordinates.ZONE_MAP.containsKey(withSpaces)) return withSpaces
-        val withUnderscores = zone.replace(" ", "_")
-        if (Coordinates.ZONE_MAP.containsKey(withUnderscores)) return withUnderscores
-        return null
+        return AiDecisionPolicy.normalizeZone(geminiZone)?.takeIf { Coordinates.ZONE_MAP.containsKey(it) }
     }
 
     // ── Autopilot ─────────────────────────────────────────────────────
@@ -591,151 +618,131 @@ Or when waiting is strategically safer: {"action":"wait","reasoning":"<15 words 
      * Voice commands still work during autopilot (Fast Path overrides).
      */
     fun startAutopilot() {
-        // Prioritize three evidence-backed archetypes instead of pretending to
-        // be a competitive agent for arbitrary decks.
-        val profile = DeckProfiles.matchNames(deckCards)
-        if (profile == null) {
-            overlay?.updateStatus(
-                "AUTO: Solo Ice Bow, Miner Control o Log Bait de Hypno"
-            )
+        if (com.yoyostudios.clashcompanion.strategy.DeckProfiles.matchNames(deckCards) == null) {
+            overlay?.updateStatus("AUTO: Importa Ice Bow, Miner Control o el Logbait de Hypno exacto")
             return
         }
-        if (!AiConnection.isConfigured()) {
-            overlay?.updateStatus("Autopilot: configura Gemini en Clash Commander")
-            Log.w(TAG, "CMD: Autopilot skipped — no GEMINI_API_KEY")
+        val useLocal = com.yoyostudios.clashcompanion.strategy.DeckProfiles.matchNames(deckCards)?.id == "hypno_wb_bait"
+        if (!useLocal && !AiConnection.isConfigured()) {
+            overlay?.updateStatus("Autopilot: configura Gemini para ese mazo, o prepara Hypno local")
             return
         }
-        if (isAutopilot) {
-            overlay?.updateStatus("AUTOPILOT already active")
-            return
-        }
+        if (isAutopilot) return
+        cancelPendingDecision()
         isAutopilot = true
-        overlay?.updateStatus("AUTOPILOT: ${profile.displayName} activo")
+        localAutopilot = useLocal
+        LocalArenaModel.enabled = useLocal
+        localSession.reset()
+        lastLocalStatus = ""
+        lastLocalLoggedFrame = null
+        overlay?.updateStatus(if (useLocal) "AUTO LOCAL HYPNO: Observando; sin conexion a Gemini" else "AUTOPILOT: Activo; esperando una partida verificable")
         overlay?.setAutopilotActive(true)
-        Log.i(TAG, "CMD: Autopilot STARTED")
-
         autopilotJob = scope.launch {
-            while (isActive) {
-                delay(AUTOPILOT_INTERVAL_MS)
-
-                // Skip if busy (another command executing) or hand not ready
-                if (isBusy) continue
-                if (!HandDetector.hasReliableHand(2)) {
-                    overlay?.updateStatus(
-                        "AUTO: Esperando 2/4 cartas. ${HandDetector.diagnosticStatus}"
-                    )
-                    continue
+            AutopilotLoop.run(if (useLocal) 150L else AUTOPILOT_INTERVAL_MS, cycle = {
+                if (!isBusy && !isGestureInFlight) {
+                    if (useLocal) localCycle()
+                    else launchDecision("autopilot", sttLatencyMs = 0, autonomous = true)?.join()
                 }
+            }, onFailure = { failure ->
+                cancelPendingDecision()
+                overlay?.updateStatus("AUTO: Observacion fallida; reintentando automaticamente")
+                Log.w(TAG, "AUTO: Cycle retry (${failure.javaClass.simpleName})")
+            })
+        }
+    }
 
-                // Call Gemini for decision
-                try {
-                    isBusy = true
-                    val startMs = System.currentTimeMillis()
+    private fun localStatus(message: String) {
+        if (message != lastLocalStatus) {
+            lastLocalStatus = message; overlay?.updateStatus(message); LocalMatchTrace.status(message)
+        }
+    }
 
-                    val result = withContext(Dispatchers.IO) {
-                        val systemPrompt = buildSmartPrompt()
-                        val userText = "AUTOPILOT: Choose a SAFE action from the verified current hand. " +
-                                "Use the actual DECK and screenshot, never assume Knight or Archers. " +
-                                "Priority: defend immediate threats, then counterpush if elixir permits. " +
-                                "You MAY return wait when elixir is insufficient or the board is unclear. " +
-                                "Never recommend a card missing from the verified hand."
-
-                        val arenaImg = captureArenaImageBase64()
-                        if (arenaImg != null) {
-                            GeminiClient.chatWithImages(
-                                systemInstruction = systemPrompt,
-                                userText = userText,
-                                images = listOf(arenaImg),
-                                maxTokens = 256,
-                                jsonMode = true
-                            )
-                        } else {
-                            GeminiClient.chat(
-                                systemInstruction = systemPrompt,
-                                userMessage = userText,
-                                maxTokens = 256,
-                                jsonMode = true
-                            )
-                        }
-                    }
-
-                    val elapsed = System.currentTimeMillis() - startMs
-                    val cleanJson = GeminiClient.cleanJsonResponse(result)
-                    val json = JsonParser.parseString(cleanJson).asJsonObject
-
-                    val action = json.get("action")?.asString ?: "wait"
-                    val reasoning = json.get("reasoning")?.asString ?: ""
-
-                    if (action == "wait") {
-                        withContext(Dispatchers.Main) {
-                            overlay?.updateStatus("AUTO: Wait | $reasoning")
-                        }
-                        isBusy = false
-                        continue
-                    }
-
-                    val card = json.get("card")?.asString ?: ""
-                    val zone = json.get("zone")?.asString ?: ""
-                    val resolvedCard = resolveCardName(card)
-                    val resolvedZone = resolveZoneName(zone)
-
-                    if (resolvedCard == null || resolvedZone == null) {
-                        Log.w(TAG, "CMD: AUTOPILOT bad response: card=$card zone=$zone")
-                        isBusy = false
-                        continue
-                    }
-
-                    if (!HandDetector.hasReliableHand(2)) {
-                        overlay?.updateStatus("AUTO: Mano perdida durante analisis; no tocar")
-                        isBusy = false
-                        continue
-                    }
-                    if (!HandDetector.cardToSlot.containsKey(resolvedCard)) {
-                        withContext(Dispatchers.Main) {
-                            overlay?.updateStatus("AUTO: $resolvedCard not in hand | $reasoning")
-                        }
-                        isBusy = false
-                        continue
-                    }
-
-                    withContext(Dispatchers.Main) {
-                        overlay?.updateStatus("AUTO: $resolvedCard -> $resolvedZone | $reasoning | ${elapsed}ms")
-                    }
-
-                    // Execute on main thread — executeFastPath releases isBusy via handler
-                    withContext(Dispatchers.Main) {
-                        executeFastPath(
-                            CommandParser.ParsedCommand(
-                                tier = CommandTier.FAST,
-                                card = resolvedCard,
-                                zone = resolvedZone,
-                                confidence = 1.0f,
-                                rawTranscript = "AUTOPILOT: $reasoning"
-                            ),
-                            parseMs = elapsed,
-                            sttLatencyMs = 0
-                        )
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "CMD: AUTOPILOT error: ${e.message}")
-                    isBusy = false
+    private fun localCycle() {
+        if (!localAutopilot || !isAutopilot) return
+        if (com.yoyostudios.clashcompanion.strategy.DeckProfiles.matchNames(deckCards)?.id != "hypno_wb_bait") {
+            stopAutopilot()
+            overlay?.updateStatus("AUTO LOCAL: Mazo cambiado; prepara las ocho cartas de Hypno")
+            return
+        }
+        val foreground = ClashCompanionAccessibilityService.instance?.gameInForeground
+        if (foreground == false) {
+            localStatus("AUTO LOCAL: Esperando Clash Royale en pantalla")
+            return
+        }
+        val battle = HandDetector.localBattle() ?: run {
+            localStatus("AUTO LOCAL: ${LocalArenaModel.status} | esperando mano y arena recientes")
+            return
+        }
+        val action = localSession.consider(battle, SystemClock.elapsedRealtime())
+        val frameKey = battle.captureSession to battle.frameId
+        if (frameKey != lastLocalLoggedFrame) {
+            lastLocalLoggedFrame = frameKey
+            LocalMatchTrace.observation(battle, action, localSession.confirmed, localSession.confirmedAbilities, localSession.unconfirmed)
+        }
+        when (action) {
+            is LocalAction.Wait -> localStatus("AUTO LOCAL: ${action.reason} | confirmadas ${localSession.confirmed}")
+            is LocalAction.Ability -> {
+                if (!HypnoPolicy.validates(action, battle) || HandDetector.localBattle()?.board?.heroButton != action.button ||
+                    HandDetector.matchSessionId != battle.matchSession ||
+                    ScreenCaptureService.currentCaptureSessionId() != battle.captureSession) return
+                val service = ClashCompanionAccessibilityService.instance ?: return
+                val revision = ++gestureRevision
+                isGestureInFlight = true; isBusy = true
+                overlay?.setPassthrough(true)
+                localStatus("AUTO LOCAL: ${action.reason}")
+                val started = SystemClock.elapsedRealtime()
+                service.tapControl(action.button.x * battle.width, action.button.y * battle.height) { completed ->
+                    if (revision != gestureRevision) return@tapControl
+                    overlay?.setPassthrough(false)
+                    isGestureInFlight = false; isBusy = false
+                    HandDetector.requirePostGestureObservation()
+                    LocalMatchTrace.gesture(battle, action, completed, started)
+                    if (completed && localAutopilot && isAutopilot && HandDetector.matchSessionId == battle.matchSession &&
+                        ScreenCaptureService.currentCaptureSessionId() == battle.captureSession)
+                        localSession.abilityIssued(battle, SystemClock.elapsedRealtime())
+                    else localSession.gestureFailed(SystemClock.elapsedRealtime())
                 }
+            }
+            is LocalAction.Play -> {
+                if (!HypnoPolicy.validates(action, battle) ||
+                    HandDetector.cardToSlot[action.card] != action.slot ||
+                    ScreenCaptureService.currentCaptureSessionId() != battle.captureSession ||
+                    HandDetector.matchSessionId != battle.matchSession) {
+                    localStatus("AUTO LOCAL: Observacion cambiada; volver a observar")
+                    return
+                }
+                localStatus("AUTO LOCAL: ${action.card} | ${action.reason}")
+                val started = SystemClock.elapsedRealtime()
+                val accepted = executeFastPath(CommandParser.ParsedCommand(CommandTier.FAST,
+                    card = action.card, confidence = 1f, rawTranscript = "AUTOPILOT: ${action.reason}"),
+                    parseMs = battle.board.inferenceMs, sttLatencyMs = 0,
+                    rawTargetX = action.x * battle.width, rawTargetY = action.y * battle.height,
+                    onGestureResult = { completed ->
+                        LocalMatchTrace.gesture(battle, action, completed, started)
+                        if (completed && localAutopilot && isAutopilot)
+                            localSession.issued(action, battle, SystemClock.elapsedRealtime())
+                        else localSession.gestureFailed(SystemClock.elapsedRealtime())
+                    })
+                if (!accepted) localSession.gestureFailed(SystemClock.elapsedRealtime())
             }
         }
     }
 
-    /**
-     * Stop autopilot mode.
-     */
+    /** Stops every pending AI decision, including Smart when Auto is already inactive. */
     fun stopAutopilot() {
-        if (!isAutopilot) return
         autopilotJob?.cancel()
         autopilotJob = null
         isAutopilot = false
+        localAutopilot = false
+        LocalArenaModel.enabled = false
+        localSession.reset()
+        cancelPendingDecision()
+        cancelPendingGesture()
+        clearQueue()
+        clearRules()
         isBusy = false
         overlay?.setAutopilotActive(false)
-        overlay?.updateStatus("AUTOPILOT stopped — you're in control")
-        Log.i(TAG, "CMD: Autopilot STOPPED")
+        overlay?.updateStatus("IA detenida — control manual")
     }
 
     // ── Targeting Path Execution ──────────────────────────────────────
@@ -772,41 +779,13 @@ Or when waiting is strategically safer: {"action":"wait","reasoning":"<15 words 
             return
         }
 
-        // Check card is in hand
-        val slotIndex = HandDetector.cardToSlot[cmd.card]
-        if (slotIndex == null) {
-            overlay?.updateStatus("TARGET: ${cmd.card} not in hand")
-            return
-        }
-        if (slotIndex < 0 || slotIndex >= Coordinates.CARD_SLOTS.size) {
-            overlay?.updateStatus("TARGET: Invalid slot $slotIndex")
-            return
-        }
-
-        val svc = ClashCompanionAccessibilityService.instance
-        if (svc == null) {
-            overlay?.updateStatus("ERROR: Accessibility not connected")
-            return
-        }
-
-        isBusy = true
-        val (slotX, slotY) = Coordinates.CARD_SLOTS[slotIndex]
-
-        // Use detection center as target coordinates
         val targetX = match.centerX.toFloat()
         val targetY = match.centerY.toFloat()
-
-        val msg = "TARGET: ${cmd.card} -> ${cmd.targetCard} at (${match.centerX},${match.centerY})"
-        overlay?.updateStatus(msg)
-        Log.i(TAG, "CMD: $msg conf=${String.format("%.0f", match.confidence * 100)}%")
-
-        overlay?.setPassthrough(true)
-        svc.playCard(slotX, slotY, targetX, targetY)
-
-        handler.postDelayed({
-            overlay?.setPassthrough(false)
-            isBusy = false
-        }, 500)
+        overlay?.updateStatus("TARGET: ${cmd.card} -> ${cmd.targetCard}")
+        executeFastPath(
+            cmd.copy(rawTranscript = "TARGET: ${cmd.rawTranscript}"),
+            parseMs, sttLatencyMs, rawTargetX = targetX, rawTargetY = targetY
+        )
     }
 
     // ── Conditional Rules Execution ───────────────────────────────────
@@ -1035,8 +1014,12 @@ Or when waiting is strategically safer: {"action":"wait","reasoning":"<15 words 
         parseMs: Long,
         sttLatencyMs: Long,
         rawTargetX: Float? = null,
-        rawTargetY: Float? = null
-    ) {
+        rawTargetY: Float? = null,
+        onGestureResult: ((Boolean) -> Unit)? = null
+    ): Boolean {
+        if (isGestureInFlight) return false
+        if (localAutopilot && !cmd.rawTranscript.startsWith("AUTOPILOT:"))
+            localSession.manualOverride(SystemClock.elapsedRealtime())
         val card = cmd.card
         val zone = cmd.zone
 
@@ -1048,24 +1031,22 @@ Or when waiting is strategically safer: {"action":"wait","reasoning":"<15 words 
             overlay?.updateStatus(msg)
             Log.w(TAG, "CMD: $msg")
             isBusy = false
-            return
+            return false
         }
 
         // Do not tap stale card slots while recording an unrelated app.
         if (!HandDetector.hasReliableHand(1)) {
             overlay?.updateStatus("No veo la mano. Pulsa Img para guardar diagnostico")
             isBusy = false
-            return
+            return false
         }
 
-        // Reject an unaffordable play when the bar was successfully observed.
-        // If unreadable, leave it unknown instead of inventing a value.
         val availableElixir = HandDetector.ownElixir
         val cost = DeckManager.currentDeck.firstOrNull { it.name == card }?.elixir
         if (ElixirPlayGate.blocks(availableElixir, cost)) {
             overlay?.updateStatus("Sin elixir para $card ($availableElixir/$cost); esperando")
             isBusy = false
-            return
+            return false
         }
 
         // Check card is in hand via classifier
@@ -1079,7 +1060,7 @@ Or when waiting is strategically safer: {"action":"wait","reasoning":"<15 words 
             overlay?.updateStatus(msg)
             Log.w(TAG, "CMD: $msg")
             isBusy = false
-            return
+            return false
         }
 
         if (slotIndex < 0 || slotIndex >= Coordinates.CARD_SLOTS.size) {
@@ -1087,7 +1068,7 @@ Or when waiting is strategically safer: {"action":"wait","reasoning":"<15 words 
             overlay?.updateStatus(msg)
             Log.e(TAG, "CMD: $msg")
             isBusy = false
-            return
+            return false
         }
 
         val (slotX, slotY) = Coordinates.CARD_SLOTS[slotIndex]
@@ -1104,7 +1085,7 @@ Or when waiting is strategically safer: {"action":"wait","reasoning":"<15 words 
                 overlay?.updateStatus(msg)
                 Log.e(TAG, "CMD: $msg")
                 isBusy = false
-                return
+                return false
             }
             val zoneCoords = Coordinates.ZONE_MAP[zone]
             if (zoneCoords == null) {
@@ -1112,7 +1093,7 @@ Or when waiting is strategically safer: {"action":"wait","reasoning":"<15 words 
                 overlay?.updateStatus(msg)
                 Log.e(TAG, "CMD: $msg")
                 isBusy = false
-                return
+                return false
             }
             zoneX = zoneCoords.first
             zoneY = zoneCoords.second
@@ -1125,10 +1106,14 @@ Or when waiting is strategically safer: {"action":"wait","reasoning":"<15 words 
             overlay?.updateStatus(msg)
             Log.e(TAG, "CMD: $msg")
             isBusy = false
-            return
+            return false
         }
 
         isBusy = true
+        isGestureInFlight = true
+        val thisGesture = ++gestureRevision
+        val gestureMatch = HandDetector.matchSessionId
+        val gestureCapture = ScreenCaptureService.currentCaptureSessionId()
 
         val totalMs = parseMs + sttLatencyMs
         val displayZone = zone ?: "(${zoneX.toInt()},${zoneY.toInt()})"
@@ -1141,20 +1126,26 @@ Or when waiting is strategically safer: {"action":"wait","reasoning":"<15 words 
         }
         Log.i(TAG, "CMD: PLAY $card slot=$slotIndex ($slotX,$slotY) -> ($zoneX,$zoneY) ${totalMs}ms")
 
-        // Record last played for "follow up" lane coherence
-        lastPlayedCard = card
-        lastPlayedZone = zone
-        lastPlayedTimeMs = System.currentTimeMillis()
-
         // Make overlay transparent to touches so dispatchGesture doesn't hit overlay
         overlay?.setPassthrough(true)
-        svc.playCard(slotX, slotY, zoneX, zoneY)
-
-        // Release busy lock and restore overlay touchability after gesture completes
-        handler.postDelayed({
+        svc.playCard(slotX, slotY, zoneX, zoneY) { completed ->
+            if (thisGesture != gestureRevision) return@playCard
+            if (completed && gestureMatch == HandDetector.matchSessionId &&
+                gestureCapture == ScreenCaptureService.currentCaptureSessionId()) {
+                lastPlayedCard = card
+                lastPlayedZone = zone
+                lastPlayedTimeMs = System.currentTimeMillis()
+            } else if (!completed) {
+                overlay?.updateStatus("Gesto cancelado; jugada no confirmada")
+            }
             overlay?.setPassthrough(false)
-            isBusy = false
-        }, 500)
+            isGestureInFlight = false
+            isBusy = activeDecisionJob?.isActive == true
+            HandDetector.requirePostGestureObservation()
+            onGestureResult?.invoke(completed && gestureMatch == HandDetector.matchSessionId &&
+                gestureCapture == ScreenCaptureService.currentCaptureSessionId())
+        }
+        return true
     }
 
     /**

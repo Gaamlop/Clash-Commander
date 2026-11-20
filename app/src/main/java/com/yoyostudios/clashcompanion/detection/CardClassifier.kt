@@ -72,6 +72,7 @@ object CardClassifier {
      * Load the model and class mapping from assets. Call once at startup.
      */
     fun init(context: Context) {
+        com.yoyostudios.clashcompanion.local.HypnoPortraitMatcher.initialize(context.assets)
         CardTemplateMatcher.init(context.assets)
         if (module != null) return
         try {
@@ -173,6 +174,14 @@ object CardClassifier {
                 continue
             }
             try {
+                if (slot < 4) {
+                    val portrait = com.yoyostudios.clashcompanion.local.HypnoPortraitMatcher.match(crop, allowedNames)
+                    if (portrait != null && portrait !in usedNames) {
+                        result[slot] = portrait
+                        usedNames.add(portrait)
+                        continue
+                    }
+                }
                 // Owner's video-derived fingerprints recognize new/updated card art.
                 // Only main-hand cards: the much smaller next-card artwork is
                 // rendered at a different size and needs separate calibration.

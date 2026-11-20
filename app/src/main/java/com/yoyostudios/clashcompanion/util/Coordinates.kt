@@ -47,41 +47,25 @@ object Coordinates {
 
     // ── Card Slot ROIs for classifier cropping ────────────────────────────
     // Bounding boxes for the card ART area (not the full card frame).
-    // Derived from calibrated slot centers: x=350,520,690,860 at y=2130.
-    // Card art crop: 140px wide × 130px tall, starting ~100px above center.
+    // CaptureGeometry holds the single reference used for both crops and taps.
     //
     // IMPORTANT: These use RAW pixel values for the 1080x2340 screen capture
     // frame, NOT scaled via displayMetrics. ScreenCaptureService captures the
     // full resolution including nav bar, while displayMetrics excludes it.
-    // Use frameScaled() variants when cropping from a captured Bitmap.
+    // Pass actual bitmap dimensions when cropping a captured frame.
 
     data class CardSlotROI(val x: Int, val y: Int, val w: Int, val h: Int)
 
-    // Reference ROI values (1080x2340 full-frame coordinates)
-    // Pixel-verified from in-game screenshot analysis on Samsung A35
-    private val REF_CARD_ROIS = listOf(
-        CardSlotROI(248, 2025, 177, 215), // slot 0 (leftmost)
-        CardSlotROI(452, 2025, 176, 215), // slot 1
-        CardSlotROI(654, 2025, 177, 215), // slot 2
-        CardSlotROI(858, 2025, 177, 215), // slot 3 (rightmost)
-    )
     private val REF_NEXT_ROI = CardSlotROI(61, 2215, 79, 110)
 
     /**
      * Get card slot ROIs scaled to actual frame dimensions.
      * Call with the actual captured frame size, NOT displayMetrics.
      */
-    fun getCardSlotROIs(frameW: Int, frameH: Int): List<CardSlotROI> {
-        if (frameW == REF_W.toInt() && frameH == REF_H.toInt()) return REF_CARD_ROIS
-        val sx = frameW / REF_W
-        val sy = frameH / REF_H
-        return REF_CARD_ROIS.map { roi ->
-            CardSlotROI(
-                (roi.x * sx).toInt(), (roi.y * sy).toInt(),
-                (roi.w * sx).toInt(), (roi.h * sy).toInt()
-            )
+    fun getCardSlotROIs(frameW: Int, frameH: Int): List<CardSlotROI> =
+        CaptureGeometry.cardSlotROIs(frameW, frameH).map { roi ->
+            CardSlotROI(roi.x, roi.y, roi.width, roi.height)
         }
-    }
 
     /** Get next-card ROI scaled to actual frame dimensions. */
     fun getNextCardROI(frameW: Int, frameH: Int): CardSlotROI {
@@ -95,7 +79,7 @@ object Coordinates {
     }
 
     /** Convenience: get ROIs using raw reference values (for 1080x2340 frames) */
-    val CARD_SLOT_ROIS: List<CardSlotROI> get() = REF_CARD_ROIS
+    val CARD_SLOT_ROIS: List<CardSlotROI> get() = getCardSlotROIs(REF_W.toInt(), REF_H.toInt())
     val NEXT_CARD_ROI: CardSlotROI get() = REF_NEXT_ROI
 
     // ── Arena Crop Region (for Roboflow detection) ────────────────
@@ -104,33 +88,36 @@ object Coordinates {
     const val ARENA_CROP_TOP = 200
     const val ARENA_CROP_BOTTOM = 1900
 
+    /** Arena crop in actual capture pixels; callers retain its offset for detections. */
+    fun getArenaROI(frameWidth: Int, frameHeight: Int): CardSlotROI? =
+        CaptureGeometry.arenaROI(frameWidth, frameHeight)?.let {
+            CardSlotROI(it.x, it.y, it.width, it.height)
+        }
+
     // ── Card Slot Centers (bottom of screen, 4 visible cards) ──
-    val CARD_SLOT_1 get() = pos(350f, 2130f)
-    val CARD_SLOT_2 get() = pos(520f, 2130f)
-    val CARD_SLOT_3 get() = pos(690f, 2130f)
-    val CARD_SLOT_4 get() = pos(860f, 2130f)
+    val CARD_SLOT_1 get() = CARD_SLOTS[0]
+    val CARD_SLOT_2 get() = CARD_SLOTS[1]
+    val CARD_SLOT_3 get() = CARD_SLOTS[2]
+    val CARD_SLOT_4 get() = CARD_SLOTS[3]
 
-    val CARD_SLOTS get() = listOf(CARD_SLOT_1, CARD_SLOT_2, CARD_SLOT_3, CARD_SLOT_4)
+    val CARD_SLOTS get() = CaptureGeometry.cardSlotCenters(screenW.toInt(), screenH.toInt())
 
-    // ── Arena Zones (where to place cards) ──
-    val LEFT_BRIDGE    get() = pos(240f, 950f)
-    val RIGHT_BRIDGE   get() = pos(840f, 950f)
-    val CENTER         get() = pos(540f, 1050f)
-    val BEHIND_LEFT    get() = pos(270f, 1300f)
-    val BEHIND_RIGHT   get() = pos(810f, 1300f)
-    val FRONT_LEFT     get() = pos(270f, 800f)
-    val FRONT_RIGHT    get() = pos(810f, 800f)
-    val BACK_CENTER    get() = pos(540f, 1400f)
-
-    // Opponent tower positions (for aggressive placement near their towers)
-    val OPP_LEFT_TOWER  get() = pos(270f, 650f)
-    val OPP_RIGHT_TOWER get() = pos(810f, 650f)
-    val OPP_KING        get() = pos(540f, 550f)
-
-    // Player tower positions (for defensive placement near your towers)
-    val MY_LEFT_TOWER   get() = pos(270f, 1400f)
-    val MY_RIGHT_TOWER  get() = pos(810f, 1400f)
-    val MY_KING         get() = pos(540f, 1500f)
+    // Arena anchors are calibrated separately from the card-art crops.
+    private fun placement(zone: String) = ArenaPlacementCalibration.position(zone, screenW.toInt(), screenH.toInt())
+    val LEFT_BRIDGE get() = placement("left_bridge")
+    val RIGHT_BRIDGE get() = placement("right_bridge")
+    val CENTER get() = placement("center")
+    val BEHIND_LEFT get() = placement("behind_left")
+    val BEHIND_RIGHT get() = placement("behind_right")
+    val FRONT_LEFT get() = placement("front_left")
+    val FRONT_RIGHT get() = placement("front_right")
+    val BACK_CENTER get() = placement("back_center")
+    val OPP_LEFT_TOWER get() = placement("opponent_left")
+    val OPP_RIGHT_TOWER get() = placement("opponent_right")
+    val OPP_KING get() = placement("opponent_king")
+    val MY_LEFT_TOWER get() = placement("my_left")
+    val MY_RIGHT_TOWER get() = placement("my_right")
+    val MY_KING get() = placement("my_king")
 
     // Map of zone name aliases to coordinates
     val ZONE_MAP: Map<String, Pair<Float, Float>> get() = mapOf(

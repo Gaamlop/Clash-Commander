@@ -23,11 +23,13 @@ internal object OwnElixirDetector {
         val y2 = (frame.height * (2365.0 / 2400)).toInt().coerceIn(0, frame.height - 1)
         val filled = BooleanArray(SAMPLES) { index ->
             val fraction = (index + 0.5) / SAMPLES
-            val x = (frame.width * (0.36 + fraction * (0.94 - 0.36))).toInt()
+            // Skip the numeral/droplet at the bar's left edge, but compensate
+            // for that omitted segment instead of treating this as the whole bar.
+            val x = (frame.width * (0.29 + fraction * (0.96 - 0.29))).toInt()
                 .coerceIn(0, frame.width - 1)
             isFilledPixel(frame.getPixel(x, y1)) && isFilledPixel(frame.getPixel(x, y2))
         }
-        return ElixirBarMath.estimate(filled)
+        return ElixirBarMath.estimateSegment(filled)
     }
 
     private fun isFilledPixel(pixel: Int): Boolean {
@@ -40,6 +42,17 @@ internal object OwnElixirDetector {
 
 /** Pure Kotlin logic, independently unit testable without Android image APIs. */
 internal object ElixirBarMath {
+    /** Conservative lower bound on the complete bar, excluding its overlaid number. */
+    fun estimateSegment(filled: BooleanArray): Int? {
+        if (filled.size < 20 || !filled[0] || filled.count { it } < 2) return null
+        val last = filled.indexOfLast { it }
+        val holes = (0..last).count { !filled[it] }
+        if (holes > 2) return null
+        val end = .29 + (filled.count { it } - .5) / filled.size * (.96 - .29)
+        // At most nine: the obscured/unsampled pixels cannot prove exactly ten.
+        return (((end - .222) / (.965 - .222)) * 10).toInt().coerceIn(0, 9)
+    }
+
     fun estimate(filled: BooleanArray): Int? {
         if (filled.size < 20) return null
         val filledCount = filled.count { it }

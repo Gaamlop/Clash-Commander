@@ -8,14 +8,17 @@ $RootDir = (Resolve-Path (Join-Path $PSScriptRoot ".."))
 Set-Location $RootDir
 
 $ZipformerModelDir = Join-Path $RootDir "app\src\main\assets\sherpa-onnx-zipformer-en-2023-04-01"
+$WhisperModelDir = Join-Path $RootDir "app\src\main\assets\sherpa-onnx-whisper-tiny"
 $AssetsDir = Join-Path $RootDir "app\src\main\assets"
 $JniDir = Join-Path $RootDir "app\src\main\jniLibs\arm64-v8a"
 
 $ZipformerTarballUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-en-2023-04-01.tar.bz2"
+$WhisperTarballUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-whisper-tiny.tar.bz2"
 $SileroVadUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx"
 $SherpaAndroidTarballUrl = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.23/sherpa-onnx-v1.12.23-android.tar.bz2"
 
 New-Item -ItemType Directory -Force -Path $ZipformerModelDir | Out-Null
+New-Item -ItemType Directory -Force -Path $WhisperModelDir | Out-Null
 New-Item -ItemType Directory -Force -Path $AssetsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $JniDir | Out-Null
 
@@ -36,7 +39,7 @@ function Cleanup {
 
 try {
   function Fetch($Url, $OutFile) {
-    if (Test-Path $OutFile -and (Get-Item $OutFile).Length -gt 0) {
+    if ((Test-Path $OutFile) -and (Get-Item $OutFile).Length -gt 0) {
       Write-Host "OK  : cached" (Split-Path $OutFile -Leaf)
       return
     }
@@ -99,6 +102,29 @@ try {
     Write-Host "OK  : Zipformer model files already present"
   }
 
+  $WhisperRequired = @(
+    "sherpa-onnx-whisper-tiny/tiny-encoder.int8.onnx",
+    "sherpa-onnx-whisper-tiny/tiny-decoder.int8.onnx",
+    "sherpa-onnx-whisper-tiny/tiny-tokens.txt"
+  )
+  $NeedWhisper = $false
+  foreach ($Rel in $WhisperRequired) {
+    $OutPath = Join-Path $WhisperModelDir (Split-Path $Rel -Leaf)
+    if (-not (Test-Path $OutPath) -or ((Get-Item $OutPath).Length -le 0)) { $NeedWhisper = $true }
+  }
+  if ($NeedWhisper) {
+    $WhisperTarball = Join-Path $TmpDir "whisper.tar.bz2"
+    Fetch $WhisperTarballUrl $WhisperTarball
+    if (-not (Extract-TarPaths $WhisperTarball $WhisperRequired)) {
+      throw "Failed to extract multilingual Whisper model files from archive"
+    }
+    foreach ($Rel in $WhisperRequired) {
+      Copy-Item -Force (Join-Path $TmpDir $Rel) (Join-Path $WhisperModelDir (Split-Path $Rel -Leaf))
+    }
+  } else {
+    Write-Host "OK  : Spanish Whisper model files already present"
+  }
+
 	  $SileroVadPath = Join-Path $AssetsDir "silero_vad.onnx"
 	  if (-not (Test-Path $SileroVadPath) -or ((Get-Item $SileroVadPath).Length -le 0)) {
 	    Fetch $SileroVadUrl $SileroVadPath
@@ -107,18 +133,18 @@ try {
 	  }
 
 	  $JniRequiredA = @(
-	    "jniLibs/arm64-v8a/libonnxruntime.so",
 	    "jniLibs/arm64-v8a/libsherpa-onnx-jni.so",
 	    "jniLibs/arm64-v8a/libsherpa-onnx-c-api.so",
 	    "jniLibs/arm64-v8a/libsherpa-onnx-cxx-api.so"
 	  )
 	  $JniRequiredB = @(
-	    "sherpa-onnx-v1.12.23-android/jniLibs/arm64-v8a/libonnxruntime.so",
 	    "sherpa-onnx-v1.12.23-android/jniLibs/arm64-v8a/libsherpa-onnx-jni.so",
 	    "sherpa-onnx-v1.12.23-android/jniLibs/arm64-v8a/libsherpa-onnx-c-api.so",
 	    "sherpa-onnx-v1.12.23-android/jniLibs/arm64-v8a/libsherpa-onnx-cxx-api.so"
 	  )
 
+      # The matching ONNX 1.17.1 AAR owns this library on both build platforms.
+      Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $JniDir "libonnxruntime.so")
 	  $NeedJni = $false
 	  foreach ($Rel in $JniRequiredA) {
 	    $OutPath = Join-Path $JniDir (Split-Path $Rel -Leaf)
@@ -152,7 +178,9 @@ try {
     (Join-Path $ZipformerModelDir "tokens.txt"),
     (Join-Path $ZipformerModelDir "bpe.model"),
     (Join-Path $ZipformerModelDir "bpe.vocab"),
-    (Join-Path $JniDir "libonnxruntime.so"),
+    (Join-Path $WhisperModelDir "tiny-encoder.int8.onnx"),
+    (Join-Path $WhisperModelDir "tiny-decoder.int8.onnx"),
+    (Join-Path $WhisperModelDir "tiny-tokens.txt"),
     (Join-Path $JniDir "libsherpa-onnx-jni.so"),
     (Join-Path $JniDir "libsherpa-onnx-c-api.so"),
     (Join-Path $JniDir "libsherpa-onnx-cxx-api.so") | Format-Table Name, Length

@@ -18,6 +18,12 @@ class ClashCompanionAccessibilityService : AccessibilityService() {
 
     private val handler = Handler(Looper.getMainLooper())
     private var isTouchActive = false
+    private val releaseTouch = Runnable { isTouchActive = false }
+    private val gestureToken = Any()
+    private var gestureGeneration = 0L
+    private var pendingResult: ((Boolean) -> Unit)? = null
+    private val foreground = ForegroundWindowTracker()
+    val gameInForeground: Boolean? get() = foreground.gameInForeground
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -27,20 +33,27 @@ class ClashCompanionAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         when (event?.eventType) {
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> foreground.observe(
+                event.packageName?.toString(), event.className?.toString(), event.isFullScreen)
             AccessibilityEvent.TYPE_TOUCH_INTERACTION_START -> {
+                handler.removeCallbacks(releaseTouch)
                 isTouchActive = true
             }
             AccessibilityEvent.TYPE_TOUCH_INTERACTION_END -> {
-                handler.postDelayed({ isTouchActive = false }, 100) // 100ms cooldown
+                handler.removeCallbacks(releaseTouch)
+                handler.postDelayed(releaseTouch, 100)
             }
         }
     }
 
     override fun onInterrupt() {
+        cancelPendingGestures()
         Log.w(TAG, "AccessibilityService interrupted")
     }
 
     override fun onDestroy() {
+        handler.removeCallbacks(releaseTouch)
+        cancelPendingGestures()
         super.onDestroy()
         instance = null
         Log.i(TAG, "AccessibilityService destroyed")
@@ -59,7 +72,7 @@ class ClashCompanionAccessibilityService : AccessibilityService() {
         val gesture = GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0, 50))
             .build()
-        return dispatchGesture(gesture, callback, null)
+        return dispatchGesture(gesture, callback, handler)
     }
 
     /**
@@ -88,21 +101,78 @@ class ClashCompanionAccessibilityService : AccessibilityService() {
     /**
      * Play a card: tap the card slot, wait briefly, then tap the target zone.
      */
-    fun playCard(slotX: Float, slotY: Float, zoneX: Float, zoneY: Float) {
+    fun cancelPendingGestures() {
+        gestureGeneration++
+        handler.removeCallbacksAndMessages(gestureToken)
+        val result = pendingResult
+        pendingResult = null
+        result?.invoke(false)
+    }
+
+    // Success means both gestures completed, not that the game spent elixir.
+    fun tapControl(x: Float, y: Float, onResult: (Boolean) -> Unit) {
+        cancelPendingGestures()
+        val generation = gestureGeneration
+        var finished = false
+        fun finish(success: Boolean) {
+            if (finished || generation != gestureGeneration) return
+            finished = true
+            pendingResult = null
+            handler.removeCallbacksAndMessages(gestureToken)
+            onResult(success)
+        }
+        pendingResult = { success -> if (!finished) { finished = true; onResult(success) } }
+        handler.postAtTime({ finish(false) }, gestureToken, android.os.SystemClock.uptimeMillis() + 1_000)
+        val accepted = safeTap(x, y, object : GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription?) = finish(true)
+            override fun onCancelled(gestureDescription: GestureDescription?) = finish(false)
+        })
+        if (!accepted) finish(false)
+    }
+
+    // Success means both gestures completed, not that the game spent elixir.
+    fun playCard(
+        slotX: Float, slotY: Float, zoneX: Float, zoneY: Float,
+        onResult: (Boolean) -> Unit = {}
+    ) {
+        cancelPendingGestures()
+        val generation = gestureGeneration
+        var completed = false
+        fun finish(success: Boolean) {
+            if (completed || generation != gestureGeneration) return
+            completed = true
+            pendingResult = null
+            handler.removeCallbacksAndMessages(gestureToken)
+            onResult(success)
+        }
+        pendingResult = { success ->
+            if (!completed) {
+                completed = true
+                onResult(success)
+            }
+        }
+        handler.postAtTime(
+            { finish(false) }, gestureToken, android.os.SystemClock.uptimeMillis() + 1_500L
+        )
         val tapOk = safeTap(slotX, slotY, object : GestureResultCallback() {
             override fun onCompleted(gestureDescription: GestureDescription?) {
-                // Card slot tapped, now tap the zone after a short delay
-                handler.postDelayed({
-                    safeTap(zoneX, zoneY)
-                }, 80)
+                if (completed || generation != gestureGeneration) return
+                handler.postAtTime({
+                    if (completed || generation != gestureGeneration) return@postAtTime
+                    val accepted = safeTap(zoneX, zoneY, object : GestureResultCallback() {
+                        override fun onCompleted(gestureDescription: GestureDescription?) = finish(true)
+                        override fun onCancelled(gestureDescription: GestureDescription?) = finish(false)
+                    })
+                    if (!accepted) finish(false)
+                }, gestureToken, android.os.SystemClock.uptimeMillis() + 80L)
             }
 
             override fun onCancelled(gestureDescription: GestureDescription?) {
-                Log.w(TAG, "Card slot tap cancelled")
+                finish(false)
             }
         })
         if (!tapOk) {
-            Log.w(TAG, "playCard failed — touch active, release screen first")
+            finish(false)
         }
     }
 }

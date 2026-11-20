@@ -56,6 +56,33 @@ object DeckManager {
     var currentDeck: List<CardInfo> = emptyList()
         private set
 
+    var battleMode: BattleMode = BattleMode.CLASSIC
+        private set
+
+    fun setBattleMode(mode: BattleMode, context: Context) {
+        if (mode != battleMode) CommandRouter.stopAutopilot()
+        battleMode = mode
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putString("battle_mode", mode.name).apply()
+    }
+
+    fun restoreBattleMode(context: Context) {
+        val saved = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString("battle_mode", BattleMode.CLASSIC.name)
+        battleMode = BattleMode.entries.firstOrNull { it.name == saved } ?: BattleMode.CLASSIC
+    }
+
+    fun cardsForNames(names: Set<String>): List<CardInfo>? =
+        cardDatabase?.values?.filter { it.name in names }?.takeIf { it.size == 8 && names.size == 8 }
+
+    fun tacticalContext(): String {
+        val preset = DeckPresets.matching(currentDeck.map { it.id })
+        return "MODE: ${battleMode.tacticalContext}\n" +
+            (preset?.let { "ARCHETYPE PLAN: ${it.plan}\n" +
+                "Required evolutions (not visually verified): ${it.evolutions.joinToString()}. " +
+                "Do not assume an evolution or hero ability is ready.\n" } ?: "")
+    }
+
     /**
      * Load the card database from card-data.json in assets.
      * Call once during app init. Idempotent.
@@ -162,6 +189,7 @@ object DeckManager {
         }
         lastImportError = null
         currentDeck = cards
+        com.yoyostudios.clashcompanion.strategy.OpusCoach.onDeckChanged(cards)
 
         // Update CommandRouter with card names
         CommandRouter.deckCards = cards.map { it.name }

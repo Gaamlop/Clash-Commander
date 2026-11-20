@@ -1,0 +1,72 @@
+{
+  "affected_version": "1.5.0-local-hypno",
+  "fixed_version": "1.5.1-local-hypno",
+  "reported_on": "Nothing Phone (1), Android 15; both speech languages failed to initialize",
+  "reproduced_failure": "APK native-link validation rejected the locally built 1.5.0 APK using the distributed source/dependency versions",
+  "old_apk_sha256": "a46f3963dad734b321577206e7a51e9c39accf76fab79f39043fdc96590ab623",
+  "required_symbol": "OrtGetApiBase@VERS_1.17.1",
+  "incompatible_export": "OrtGetApiBase@@VERS_1.20.0",
+  "validator_old_apk_errors": [
+    "libsherpa-onnx-c-api.so: missing OrtGetApiBase@VERS_1.17.1 in packaged libonnxruntime.so",
+    "libsherpa-onnx-jni.so: missing OrtGetApiBase@VERS_1.17.1 in packaged libonnxruntime.so"
+  ],
+  "android_and_jvm_runtime": "1.17.1",
+  "export_reference_python_runtime": "1.20.0",
+  "phone_speech_initialization_verified": false,
+  "phone_speech_recognition_verified": false,
+  "phone_match_verified": false,
+  "scope": "ELF versioned dependency regression; local graph unchanged; Android field verification pending",
+  "old_apk_kind": "locally debug-signed APK; GitHub signing differs",
+  "jvm": {
+    "tests": 156,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "python_tests": 14,
+  "lint": {
+    "Error": 0,
+    "Warning": 76
+  },
+  "apk_bytes": 394213407,
+  "apk_sha256": "99516ca7a5b2b109c3a5b8e20cbe74c068de09e54ee2a65c76b9ff73f6486a9b",
+  "apk_signature_verified": true,
+  "apk_native_report": {
+    "abi": "arm64-v8a",
+    "libraries": [
+      "libandroidx.graphics.path.so",
+      "libc++_shared.so",
+      "libfbjni.so",
+      "libonnxruntime.so",
+      "libonnxruntime4j_jni.so",
+      "libpytorch_jni_lite.so",
+      "libsherpa-onnx-c-api.so",
+      "libsherpa-onnx-cxx-api.so",
+      "libsherpa-onnx-jni.so"
+    ],
+    "verified_versioned_links": [
+      "libonnxruntime4j_jni.so: OrtGetApiBase@VERS_1.17.1 -> libonnxruntime.so",
+      "libonnxruntime4j_jni.so: OrtSessionOptionsAppendExecutionProvider_CPU@VERS_1.17.1 -> libonnxruntime.so",
+      "libonnxruntime4j_jni.so: OrtSessionOptionsAppendExecutionProvider_Nnapi@VERS_1.17.1 -> libonnxruntime.so",
+      "libsherpa-onnx-c-api.so: OrtGetApiBase@VERS_1.17.1 -> libonnxruntime.so",
+      "libsherpa-onnx-jni.so: OrtGetApiBase@VERS_1.17.1 -> libonnxruntime.so"
+    ],
+    "speech_assets": [
+      "silero_vad.onnx",
+      "sherpa-onnx-whisper-tiny/tiny-encoder.int8.onnx",
+      "sherpa-onnx-whisper-tiny/tiny-decoder.int8.onnx",
+      "sherpa-onnx-whisper-tiny/tiny-tokens.txt",
+      "sherpa-onnx-zipformer-en-2023-04-01/encoder-epoch-99-avg-1.int8.onnx",
+      "sherpa-onnx-zipformer-en-2023-04-01/decoder-epoch-99-avg-1.int8.onnx",
+      "sherpa-onnx-zipformer-en-2023-04-01/joiner-epoch-99-avg-1.int8.onnx",
+      "sherpa-onnx-zipformer-en-2023-04-01/tokens.txt",
+      "sherpa-onnx-zipformer-en-2023-04-01/bpe.vocab",
+      "hotwords.txt"
+    ],
+    "android_runtime_tested": false
+  },
+  "native_graph_checks": [
+    "same Kotlin image-to-decision pipeline on CPU ONNX 1.17.1",
+    "six speech graphs (Spanish Whisper, English Zipformer, Silero VAD) initialized on CPU ONNX 1.17.1"
+  ]
+}
