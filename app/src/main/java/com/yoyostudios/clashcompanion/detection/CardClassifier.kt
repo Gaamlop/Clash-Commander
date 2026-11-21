@@ -46,6 +46,8 @@ object CardClassifier {
 
     // Aggregate rejection reasons without storing screenshots or card crops.
     private var diagnosticScans = 0
+    private var diagnosticCompleteHands = 0
+    private var diagnosticRecognizedSlots = 0
     private val rejectionCounts = mutableMapOf<String, Int>()
     // Last top-1 model result for each slot. Names/confidences only, never pixels.
     private val lastSlotDiagnostics = mutableMapOf<Int, String>()
@@ -225,11 +227,16 @@ object CardClassifier {
         }
 
         diagnosticScans++
+        diagnosticRecognizedSlots += (0..3).count { result.containsKey(it) }
+        if ((0..3).all { result.containsKey(it) }) diagnosticCompleteHands++
         if (diagnosticScans % 30 == 0) {
             Log.i(TAG, "CARD-ML-REJECTIONS: scans=$diagnosticScans reasons=$rejectionCounts " +
                 "top1BySlot=$lastSlotDiagnostics frame=${frame.width}x${frame.height} " +
-                "recognizedSlots=not_accuracy; no_frames_saved")
+                "completeHands=$diagnosticCompleteHands/30 recognizedHandSlots=$diagnosticRecognizedSlots/120 " +
+                "coverage_not_accuracy; no_frames_saved")
             rejectionCounts.clear()
+            diagnosticCompleteHands = 0
+            diagnosticRecognizedSlots = 0
         }
         return result
     }
