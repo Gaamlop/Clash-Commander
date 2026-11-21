@@ -47,6 +47,8 @@ object CardClassifier {
     // Aggregate rejection reasons without storing screenshots or card crops.
     private var diagnosticScans = 0
     private val rejectionCounts = mutableMapOf<String, Int>()
+    // Last top-1 model result for each slot. Names/confidences only, never pixels.
+    private val lastSlotDiagnostics = mutableMapOf<Int, String>()
 
     private fun recordRejection(reason: String) {
         rejectionCounts[reason] = (rejectionCounts[reason] ?: 0) + 1
@@ -159,6 +161,7 @@ object CardClassifier {
         }
 
         val result = mutableMapOf<Int, String>()
+        lastSlotDiagnostics.clear()
         val allowedNames = deckCards.toSet()
         val usedNames = mutableSetOf<String>()
 
@@ -169,6 +172,7 @@ object CardClassifier {
         for ((slot, roi) in allRois) {
             val crop = safeCrop(frame, roi)
             if (crop == null) {
+                lastSlotDiagnostics[slot] = "crop_failed"
                 recordRejection("crop_failed")
                 continue
             }
@@ -179,6 +183,7 @@ object CardClassifier {
                 if (slot < 4) {
                     val templateName = CardTemplateMatcher.match(crop, allowedNames)
                     if (templateName != null && templateName !in usedNames) {
+                        lastSlotDiagnostics[slot] = "template:$templateName"
                         result[slot] = templateName
                         usedNames.add(templateName)
                         continue
@@ -190,6 +195,7 @@ object CardClassifier {
                 // Previously 0.05 among seven deck classes caused false matches.
                 val probs = classifyRaw(crop)
                 if (probs == null || probs.isEmpty()) {
+                    lastSlotDiagnostics[slot] = "inference_unavailable"
                     recordRejection("inference_unavailable")
                     continue
                 }
@@ -197,6 +203,9 @@ object CardClassifier {
                 for (i in 1 until probs.size) {
                     if (probs[i] > probs[globalBestIdx]) globalBestIdx = i
                 }
+                val topKey = idx2key[globalBestIdx] ?: "unmapped"
+                val topConfidence = "%.3f".format(java.util.Locale.US, probs[globalBestIdx])
+                lastSlotDiagnostics[slot] = "$topKey@$topConfidence"
                 val deckMatch = deckIndices.firstOrNull {
                     it.first == globalBestIdx && it.second !in usedNames
                 }
@@ -218,6 +227,7 @@ object CardClassifier {
         diagnosticScans++
         if (diagnosticScans % 30 == 0) {
             Log.i(TAG, "CARD-ML-REJECTIONS: scans=$diagnosticScans reasons=$rejectionCounts " +
+                "top1BySlot=$lastSlotDiagnostics frame=${frame.width}x${frame.height} " +
                 "recognizedSlots=not_accuracy; no_frames_saved")
             rejectionCounts.clear()
         }
