@@ -32,6 +32,9 @@ jobs:
       - name: Test offline hand-slot benchmark
         run: python3 -m unittest discover -s scripts -p 'test_hand_slot_benchmark.py'
 
+      - name: Test private Logcat frame join (synthetic only)
+        run: python3 -m unittest discover -s scripts -p 'test_join_hand_logcat.py'
+
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
