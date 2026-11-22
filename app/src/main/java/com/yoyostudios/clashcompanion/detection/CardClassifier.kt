@@ -126,9 +126,27 @@ object CardClassifier {
      * @return Map of slotIndex (0-3 hand, 4 next) -> DeckManager card name
      */
     fun classifyHand(frame: Bitmap, deckCards: List<String>): Map<Int, String> {
+        // Count EVERY attempted frame, including initialization/mapping failures.
+        // Coverage is not accuracy and does not require retaining private images.
+        fun finishScan(result: Map<Int, String>): Map<Int, String> {
+            diagnosticScans++
+            diagnosticRecognizedSlots += (0..3).count { result.containsKey(it) }
+            if ((0..3).all { result.containsKey(it) }) diagnosticCompleteHands++
+            if (diagnosticScans % 30 == 0) {
+                Log.i(TAG, "CARD-ML-REJECTIONS: scans=$diagnosticScans reasons=$rejectionCounts " +
+                    "top1BySlot=$lastSlotDiagnostics frame=${frame.width}x${frame.height} " +
+                    "completeHands=$diagnosticCompleteHands/30 recognizedHandSlots=$diagnosticRecognizedSlots/120 " +
+                    "coverage_not_accuracy; no_frames_saved")
+                rejectionCounts.clear()
+                diagnosticCompleteHands = 0
+                diagnosticRecognizedSlots = 0
+            }
+            return result
+        }
+        lastSlotDiagnostics.clear()
         if (!isReady && !CardTemplateMatcher.isReady()) {
             recordRejection("model_and_templates_unavailable")
-            return emptyMap()
+            return finishScan(emptyMap())
         }
 
         val rois = Coordinates.getCardSlotROIs(frame.width, frame.height)
@@ -159,11 +177,11 @@ object CardClassifier {
 
         if (deckIndices.isEmpty() && !CardTemplateMatcher.isReady()) {
             Log.w(TAG, "CARD-ML: No deck cards mapped to model or templates!")
-            return emptyMap()
+            recordRejection("deck_mapping_unavailable")
+            return finishScan(emptyMap())
         }
 
         val result = mutableMapOf<Int, String>()
-        lastSlotDiagnostics.clear()
         val allowedNames = deckCards.toSet()
         val usedNames = mutableSetOf<String>()
 
@@ -226,19 +244,7 @@ object CardClassifier {
             }
         }
 
-        diagnosticScans++
-        diagnosticRecognizedSlots += (0..3).count { result.containsKey(it) }
-        if ((0..3).all { result.containsKey(it) }) diagnosticCompleteHands++
-        if (diagnosticScans % 30 == 0) {
-            Log.i(TAG, "CARD-ML-REJECTIONS: scans=$diagnosticScans reasons=$rejectionCounts " +
-                "top1BySlot=$lastSlotDiagnostics frame=${frame.width}x${frame.height} " +
-                "completeHands=$diagnosticCompleteHands/30 recognizedHandSlots=$diagnosticRecognizedSlots/120 " +
-                "coverage_not_accuracy; no_frames_saved")
-            rejectionCounts.clear()
-            diagnosticCompleteHands = 0
-            diagnosticRecognizedSlots = 0
-        }
-        return result
+        return finishScan(result)
     }
 
     // Target mean brightness for normalization (roughly what a normal bright card looks like)
