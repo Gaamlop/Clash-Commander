@@ -46,7 +46,11 @@ object CardClassifier {
 
     // Aggregate rejection reasons without storing screenshots or card crops.
     private var diagnosticScans = 0
+    private var diagnosticCompleteHands = 0
+    private var diagnosticRecognizedSlots = 0
     private val rejectionCounts = mutableMapOf<String, Int>()
+    // Last top-1 model result for each slot. Names/confidences only, never pixels.
+    private val lastSlotDiagnostics = mutableMapOf<Int, String>()
 
     private fun recordRejection(reason: String) {
         rejectionCounts[reason] = (rejectionCounts[reason] ?: 0) + 1
@@ -122,9 +126,38 @@ object CardClassifier {
      * @return Map of slotIndex (0-3 hand, 4 next) -> DeckManager card name
      */
     fun classifyHand(frame: Bitmap, deckCards: List<String>): Map<Int, String> {
+        // Count EVERY attempted frame, including initialization/mapping failures.
+        // Coverage is not accuracy and does not require retaining private images.
+        fun finishScan(result: Map<Int, String>): Map<Int, String> {
+            diagnosticScans++
+            // One observation per actual frame, including unknown slots. This is
+            // deliberately local Logcat output: no screenshots, pixels or uploads.
+            // Predictions are NOT ground truth. Join with private manual labels
+            // before computing 4/4 accuracy or false-positive rates.
+            val handPredictions = (0..3).map { result[it] }
+            Log.i(TAG, "CARD-ML-FRAME " + Gson().toJson(mapOf(
+                "scan" to diagnosticScans,
+                "predicted" to handPredictions,
+                "top1" to (0..3).map { lastSlotDiagnostics[it] },
+                "coverage_not_accuracy" to true
+            )))
+            diagnosticRecognizedSlots += (0..3).count { result.containsKey(it) }
+            if ((0..3).all { result.containsKey(it) }) diagnosticCompleteHands++
+            if (diagnosticScans % 30 == 0) {
+                Log.i(TAG, "CARD-ML-REJECTIONS: scans=$diagnosticScans reasons=$rejectionCounts " +
+                    "top1BySlot=$lastSlotDiagnostics frame=${frame.width}x${frame.height} " +
+                    "completeHands=$diagnosticCompleteHands/30 recognizedHandSlots=$diagnosticRecognizedSlots/120 " +
+                    "coverage_not_accuracy; no_frames_saved")
+                rejectionCounts.clear()
+                diagnosticCompleteHands = 0
+                diagnosticRecognizedSlots = 0
+            }
+            return result
+        }
+        lastSlotDiagnostics.clear()
         if (!isReady && !CardTemplateMatcher.isReady()) {
             recordRejection("model_and_templates_unavailable")
-            return emptyMap()
+            return finishScan(emptyMap())
         }
 
         val rois = Coordinates.getCardSlotROIs(frame.width, frame.height)
@@ -155,7 +188,8 @@ object CardClassifier {
 
         if (deckIndices.isEmpty() && !CardTemplateMatcher.isReady()) {
             Log.w(TAG, "CARD-ML: No deck cards mapped to model or templates!")
-            return emptyMap()
+            recordRejection("deck_mapping_unavailable")
+            return finishScan(emptyMap())
         }
 
         val result = mutableMapOf<Int, String>()
@@ -169,6 +203,7 @@ object CardClassifier {
         for ((slot, roi) in allRois) {
             val crop = safeCrop(frame, roi)
             if (crop == null) {
+                lastSlotDiagnostics[slot] = "crop_failed"
                 recordRejection("crop_failed")
                 continue
             }
@@ -179,6 +214,7 @@ object CardClassifier {
                 if (slot < 4) {
                     val templateName = CardTemplateMatcher.match(crop, allowedNames)
                     if (templateName != null && templateName !in usedNames) {
+                        lastSlotDiagnostics[slot] = "template:$templateName"
                         result[slot] = templateName
                         usedNames.add(templateName)
                         continue
@@ -190,6 +226,7 @@ object CardClassifier {
                 // Previously 0.05 among seven deck classes caused false matches.
                 val probs = classifyRaw(crop)
                 if (probs == null || probs.isEmpty()) {
+                    lastSlotDiagnostics[slot] = "inference_unavailable"
                     recordRejection("inference_unavailable")
                     continue
                 }
@@ -197,6 +234,9 @@ object CardClassifier {
                 for (i in 1 until probs.size) {
                     if (probs[i] > probs[globalBestIdx]) globalBestIdx = i
                 }
+                val topKey = idx2key[globalBestIdx] ?: "unmapped"
+                val topConfidence = "%.3f".format(java.util.Locale.US, probs[globalBestIdx])
+                lastSlotDiagnostics[slot] = "$topKey@$topConfidence"
                 val deckMatch = deckIndices.firstOrNull {
                     it.first == globalBestIdx && it.second !in usedNames
                 }
@@ -215,13 +255,7 @@ object CardClassifier {
             }
         }
 
-        diagnosticScans++
-        if (diagnosticScans % 30 == 0) {
-            Log.i(TAG, "CARD-ML-REJECTIONS: scans=$diagnosticScans reasons=$rejectionCounts " +
-                "recognizedSlots=not_accuracy; no_frames_saved")
-            rejectionCounts.clear()
-        }
-        return result
+        return finishScan(result)
     }
 
     // Target mean brightness for normalization (roughly what a normal bright card looks like)
