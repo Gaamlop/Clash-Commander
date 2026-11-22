@@ -130,6 +130,17 @@ object CardClassifier {
         // Coverage is not accuracy and does not require retaining private images.
         fun finishScan(result: Map<Int, String>): Map<Int, String> {
             diagnosticScans++
+            // One observation per actual frame, including unknown slots. This is
+            // deliberately local Logcat output: no screenshots, pixels or uploads.
+            // Predictions are NOT ground truth. Join with private manual labels
+            // before computing 4/4 accuracy or false-positive rates.
+            val handPredictions = (0..3).map { result[it] }
+            Log.i(TAG, "CARD-ML-FRAME " + Gson().toJson(mapOf(
+                "scan" to diagnosticScans,
+                "predicted" to handPredictions,
+                "top1" to (0..3).map { lastSlotDiagnostics[it] },
+                "coverage_not_accuracy" to true
+            )))
             diagnosticRecognizedSlots += (0..3).count { result.containsKey(it) }
             if ((0..3).all { result.containsKey(it) }) diagnosticCompleteHands++
             if (diagnosticScans % 30 == 0) {
